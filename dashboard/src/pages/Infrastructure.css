@@ -101,6 +101,16 @@
   margin-bottom: 1.5rem;
 }
 
+.radio-group.three-options {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 900px) {
+  .radio-group.three-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .radio-option {
   display: flex;
   flex-direction: column;

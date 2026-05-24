@@ -39,5 +39,22 @@ const postgresDataSource = new DataSource({
   },
 });
 
+// MongoDB configuration
+const mongoDataSource = new DataSource({
+  type: 'mongodb',
+  url: process.env.DATABASE_URL || 'mongodb://localhost:27017/openwa',
+  database: process.env.DATABASE_NAME || 'openwa',
+  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+  // MongoDB does not use SQL migrations; use synchronize to auto-create collections
+  synchronize: process.env.DATABASE_SYNCHRONIZE !== 'false',
+  migrationsRun: false,
+  logging: process.env.DATABASE_LOGGING === 'true',
+});
+
 // Export the appropriate data source based on DATABASE_TYPE
-export default dbType === 'postgres' ? postgresDataSource : sqliteDataSource;
+export default dbType === 'mongodb'
+  ? mongoDataSource
+  : dbType === 'postgres'
+    ? postgresDataSource
+    : sqliteDataSource;
+

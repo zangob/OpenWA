@@ -327,7 +327,7 @@ export class WebhookService {
       }
 
       // Update last triggered timestamp
-      await this.webhookRepository.update(webhook.id, {
+      await this.webhookRepository.update({ id: webhook.id }, {
         lastTriggeredAt: new Date(),
       });
 

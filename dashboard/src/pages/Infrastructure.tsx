@@ -26,10 +26,12 @@ import folderIcon from '../assets/icons/folder.svg';
 import s3Icon from '../assets/icons/s3.svg';
 
 interface DatabaseConfig {
-  type: 'sqlite' | 'postgres';
+  type: 'sqlite' | 'postgres' | 'mongodb';
   builtIn: boolean;
   host: string;
   port: string;
+  url: string;
+  name: string;
   username: string;
   password: string;
   database: string;
@@ -160,7 +162,7 @@ export function Infrastructure() {
 
     setDbConfig(prev => ({
       ...prev,
-      type: (infraStatus.database.type as 'sqlite' | 'postgres') || 'sqlite',
+      type: (infraStatus.database.type as 'sqlite' | 'postgres' | 'mongodb') || 'sqlite',
       host: infraStatus.database.host || 'localhost',
     }));
 
@@ -454,12 +456,12 @@ export function Infrastructure() {
               <Database size={20} />
               <h2>{t('infrastructure.database.title')}</h2>
             </div>
-            <span className={`status-indicator ${dbConfig.type === 'postgres' ? 'connected' : 'sqlite'}`}>
-              ● {dbConfig.type === 'postgres' ? 'PostgreSQL' : 'SQLite'}
+            <span className={`status-indicator ${dbConfig.type === 'postgres' || dbConfig.type === 'mongodb' ? 'connected' : 'sqlite'}`}>
+              ● {dbConfig.type === 'postgres' ? 'PostgreSQL' : dbConfig.type === 'mongodb' ? 'MongoDB' : 'SQLite'}
             </span>
           </div>
 
-          <div className="radio-group">
+          <div className="radio-group three-options">
             <label className={`radio-option ${dbConfig.type === 'sqlite' ? 'selected' : ''}`}>
               <input
                 type="radio"
@@ -481,6 +483,21 @@ export function Infrastructure() {
               <img src={postgresIcon} alt="" className="watermark-icon" />
               <span>{t('infrastructure.database.postgres')}</span>
               <small>{t('infrastructure.database.postgresDesc')}</small>
+            </label>
+            <label className={`radio-option ${dbConfig.type === 'mongodb' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="dbType"
+                checked={dbConfig.type === 'mongodb'}
+                onChange={() => updateDbConfig('type', 'mongodb')}
+              />
+              <svg viewBox="0 0 24 24" width="32" height="32" className="watermark-icon" fill="#4CAF50">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22c-5.523 0-10-4.477-10-10S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+                <path d="M12 4c-4.418 0-8 3.582-8 8 0 1.597.466 3.083 1.271 4.334l2.083-2.083C7.057 13.768 7 13.39 7 13c0-2.757 2.243-5 5-5s5 2.243 5 5-2.243 5-5 5c-.39 0-.768-.057-1.251-.354l-2.083 2.083C8.917 19.534 10.403 20 12 20c4.418 0 8-3.582 8-8s-3.582-8-8-8z"/>
+                <path d="M17 12c0-2.761-2.239-5-5-5s-5 2.239-5 5 2.239 5 5 5 5-2.239 5-5z"/>
+              </svg>
+              <span>MongoDB</span>
+              <small>NoSQL document database with high performance</small>
             </label>
           </div>
 
@@ -570,6 +587,77 @@ export function Infrastructure() {
             </>
           )}
 
+          {dbConfig.type === 'mongodb' && (
+            <>
+              <div className="config-form" style={{ marginTop: '1rem' }}>
+                <div className="form-row">
+                  <div className="form-group" style={{ flex: 2 }}>
+                    <label>MongoDB Connection URL (optional)</label>
+                    <input
+                      type="text"
+                      value={dbConfig.url}
+                      onChange={e => updateDbConfig('url', e.target.value)}
+                      placeholder="mongodb://user:pass@host:port/dbname"
+                    />
+                    <small style={{ color: '#64748B', fontSize: '0.75rem' }}>
+                      Leave empty to use host/port/username/password below
+                    </small>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>{t('common.host')}</label>
+                    <input
+                      type="text"
+                      value={dbConfig.host}
+                      onChange={e => updateDbConfig('host', e.target.value)}
+                      placeholder="localhost"
+                    />
+                  </div>
+                  <div className="form-group small">
+                    <label>{t('common.port')}</label>
+                    <input
+                      type="text"
+                      value={dbConfig.port || '27017'}
+                      onChange={e => updateDbConfig('port', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>{t('common.username')}</label>
+                    <input
+                      type="text"
+                      value={dbConfig.username}
+                      onChange={e => updateDbConfig('username', e.target.value)}
+                      placeholder="(optional)"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t('common.password')}</label>
+                    <input
+                      type="password"
+                      value={dbConfig.password}
+                      onChange={e => updateDbConfig('password', e.target.value)}
+                      placeholder="(optional)"
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Database Name</label>
+                    <input
+                      type="text"
+                      value={dbConfig.name || dbConfig.database}
+                      onChange={e => updateDbConfig('name', e.target.value)}
+                      placeholder="openwa"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           <div
             className="empty-state-card"
             style={{
@@ -598,10 +686,12 @@ export function Infrastructure() {
               }}
             >
               <CheckCircle size={16} />
-              {t('infrastructure.database.migrationsStatus')}
+              {dbConfig.type === 'mongodb' ? 'Auto-sync enabled' : t('infrastructure.database.migrationsStatus')}
             </p>
             <p style={{ margin: '0.5rem 0 0', color: '#64748B', fontSize: '0.8125rem', lineHeight: 1.5 }}>
-              {t('infrastructure.database.migrationsHint')}
+              {dbConfig.type === 'mongodb'
+                ? 'MongoDB uses auto-sync for collections. No manual migrations needed.'
+                : t('infrastructure.database.migrationsHint')}
             </p>
           </div>
         </section>

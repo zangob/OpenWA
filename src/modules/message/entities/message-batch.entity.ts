@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, ObjectIdColumn, BeforeInsert, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 import { DateTransformer } from '../../../common/transformers/date.transformer';
 import { jsonColumnType, dateColumnType } from '../../../common/utils/column-types';
 
@@ -38,8 +39,18 @@ export interface BatchProgress {
 
 @Entity('message_batches')
 export class MessageBatch {
-  @PrimaryGeneratedColumn('uuid')
+  @ObjectIdColumn()
+  _id?: any;
+
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) {
+      this.id = uuidv4();
+    }
+  }
 
   @Column({ name: 'batch_id', unique: true })
   batchId: string;

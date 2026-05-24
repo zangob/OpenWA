@@ -274,7 +274,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
           reconnectState.attempts = 0;
         }
 
-        void this.sessionRepository.update(id, {
+        void this.sessionRepository.update({ id }, {
           status: SessionStatus.READY,
           phone,
           pushName,
@@ -290,7 +290,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
           action: 'message_received',
         });
         // Update last active timestamp
-        void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+        void this.sessionRepository.update({ id }, { lastActiveAt: new Date() });
         // Convert IncomingMessage to plain object for dispatch
         const messageData = { ...message };
 
@@ -480,7 +480,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async updateStatus(id: string, status: SessionStatus): Promise<void> {
-    await this.sessionRepository.update(id, { status });
+    await this.sessionRepository.update({ id }, { status });
     this.logger.debug(`Session status updated to ${status}`, {
       sessionId: id,
       status,

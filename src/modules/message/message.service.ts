@@ -214,18 +214,18 @@ export class MessageService {
   ): Promise<{ messages: Message[]; total: number }> {
     const { chatId, limit = 50, offset = 0 } = options;
 
-    const query = this.messageRepository
-      .createQueryBuilder('message')
-      .where('message.sessionId = :sessionId', { sessionId })
-      .orderBy('message.createdAt', 'DESC')
-      .skip(offset)
-      .take(limit);
-
+    const where: Record<string, unknown> = { sessionId };
     if (chatId) {
-      query.andWhere('message.chatId = :chatId', { chatId });
+      where.chatId = chatId;
     }
 
-    const [messages, total] = await query.getManyAndCount();
+    const [messages, total] = await this.messageRepository.findAndCount({
+      where: where as any,
+      order: { createdAt: 'DESC' } as any,
+      skip: offset,
+      take: limit,
+    });
+
     return { messages, total };
   }
 

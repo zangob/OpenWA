@@ -157,6 +157,37 @@ export interface ChannelMessage {
   mediaUrl?: string;
 }
 
+// Phase 3: Chat History
+export interface ChatMessage {
+  id: string;
+  body: string;
+  type: string;
+  from: string;
+  to: string;
+  fromMe: boolean;
+  timestamp: number;
+  hasMedia: boolean;
+  mediaUrl?: string;
+  caption?: string;
+  quotedMessage?: {
+    id: string;
+    body: string;
+  };
+  ack?: number;
+}
+
+export interface Chat {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  timestamp: number;
+  unreadCount: number;
+  lastMessage?: ChatMessage;
+  pinned?: boolean;
+  archived?: boolean;
+  muteExpiration?: number;
+}
+
 // Phase 3: Catalog (WhatsApp Business)
 export interface Catalog {
   id: string;
@@ -240,6 +271,11 @@ export interface IWhatsAppEngine {
   getContacts(): Promise<Contact[]>;
   getContactById(contactId: string): Promise<Contact | null>;
   checkNumberExists(number: string): Promise<boolean>;
+
+  // Chats - Phase 3
+  getAllChats(): Promise<Chat[]>;
+  getChatInfo(chatId: string): Promise<Chat | null>;
+  getChatHistory(chatId: string, limit?: number): Promise<ChatMessage[]>;
 
   // Groups - Basic
   getGroups(): Promise<Group[]>;

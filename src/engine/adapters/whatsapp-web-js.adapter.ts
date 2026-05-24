@@ -26,6 +26,8 @@ import {
   Product,
   ProductQueryOptions,
   PaginatedProducts,
+  Chat,
+  ChatMessage,
 } from '../interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
 import {
@@ -115,7 +117,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       try {
         this.qrCode = await qrcode.toDataURL(qr);
         this.setStatus(EngineStatus.QR_READY);
-        this.callbacks.onQRCode?.(this.qrCode);
+        this.callbacks.onQRCode?.(this.qrCode!);
       } catch (error) {
         this.logger.error('Error generating QR code', String(error));
       }
@@ -378,6 +380,119 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         ),
       };
     });
+  }
+
+  // ============= Chat History (Phase 3) =============
+
+  async getAllChats(): Promise<Chat[]> {
+    this.ensureReady();
+    const chats = await this.client!.getChats();
+
+    return chats.map(chat => {
+      const lastMsg = chat.lastMessage;
+      return {
+        id: chat.id._serialized,
+        name: chat.name,
+        isGroup: chat.isGroup,
+        timestamp: chat.timestamp,
+        unreadCount: chat.unreadCount,
+        lastMessage: lastMsg
+          ? {
+              id: String(lastMsg.id?._serialized || lastMsg.id),
+              body: String(lastMsg.body || ''),
+              type: String(lastMsg.type || 'text'),
+              from: String(lastMsg.from || ''),
+              to: String(lastMsg.to || ''),
+              fromMe: Boolean(lastMsg.fromMe),
+              timestamp: Number(lastMsg.timestamp),
+              hasMedia: Boolean(lastMsg.hasMedia),
+              ack: lastMsg.ack,
+            }
+          : undefined,
+        pinned: chat.pinned,
+        archived: chat.archived,
+        muteExpiration: chat.muteExpiration,
+      };
+    });
+  }
+
+  async getChatInfo(chatId: string): Promise<Chat | null> {
+    this.ensureReady();
+    try {
+      const chat = await this.client!.getChatById(chatId);
+      const lastMsg = chat.lastMessage;
+      return {
+        id: chat.id._serialized,
+        name: chat.name,
+        isGroup: chat.isGroup,
+        timestamp: chat.timestamp,
+        unreadCount: chat.unreadCount,
+        lastMessage: lastMsg
+          ? {
+              id: String(lastMsg.id?._serialized || lastMsg.id),
+              body: String(lastMsg.body || ''),
+              type: String(lastMsg.type || 'text'),
+              from: String(lastMsg.from || ''),
+              to: String(lastMsg.to || ''),
+              fromMe: Boolean(lastMsg.fromMe),
+              timestamp: Number(lastMsg.timestamp),
+              hasMedia: Boolean(lastMsg.hasMedia),
+              ack: lastMsg.ack,
+            }
+          : undefined,
+        pinned: chat.pinned,
+        archived: chat.archived,
+        muteExpiration: chat.muteExpiration,
+      };
+    } catch (error) {
+      this.logger.warn(`Failed to get chat info: ${chatId}`, String(error));
+      return null;
+    }
+  }
+
+  async getChatHistory(chatId: string, limit: number = 50): Promise<ChatMessage[]> {
+    this.ensureReady();
+    try {
+      const chat = await this.client!.getChatById(chatId);
+      const messages = await chat.fetchMessages({ limit: Math.min(limit, 100) });
+
+      const result: ChatMessage[] = [];
+      for (const msg of messages) {
+        // Handle quoted message - use type assertion since getQuotedMessage exists at runtime
+        let quotedMessage: ChatMessage['quotedMessage'] = undefined;
+        if (msg.hasQuotedMsg) {
+          try {
+            const quoted = await (msg as unknown as { getQuotedMessage(): Promise<{ id: { _serialized: string }; body?: string }> }).getQuotedMessage();
+            if (quoted) {
+              quotedMessage = {
+                id: String(quoted.id?._serialized || quoted.id),
+                body: String(quoted.body || ''),
+              };
+            }
+          } catch (e) {
+            // Ignore errors getting quoted message
+          }
+        }
+
+        result.push({
+          id: String(msg.id?._serialized || msg.id),
+          body: String(msg.body || ''),
+          type: String(msg.type || 'text'),
+          from: String(msg.from || ''),
+          to: String(msg.to || ''),
+          fromMe: Boolean(msg.fromMe),
+          timestamp: Number(msg.timestamp),
+          hasMedia: Boolean(msg.hasMedia),
+          quotedMessage,
+          ack: msg.ack,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to get chat history: ${chatId}`, String(error));
+      throw error;
+    }
   }
 
   // ============= Phase 3: Extended Messaging =============

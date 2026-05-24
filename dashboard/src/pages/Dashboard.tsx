@@ -130,7 +130,7 @@ export function Dashboard() {
             sessions.map(session => (
               <div key={session.id} className="table-row">
                 <div className="session-info-cell">
-                  <span className="session-id">{session.id.substring(0, 12)}</span>
+                  <span className="session-id">{session.id ? session.id.substring(0, 12) : '—'}</span>
                   <span className="session-name" title={session.name}>
                     {session.name}
                   </span>

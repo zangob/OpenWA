@@ -341,6 +341,272 @@ export const settingsApi = {
 };
 
 // =============================================================================
+// Contact & Chat Types
+// =============================================================================
+
+export interface Contact {
+  id: string;
+  name?: string;
+  pushName?: string;
+  number: string;
+  isMyContact: boolean;
+  isBlocked?: boolean;
+  profilePicture?: string;
+  profilePicUrl?: string;
+}
+
+export interface ContactDb {
+  id: string;
+  sessionId: string;
+  contactId: string;
+  name: string | null;
+  pushName: string | null;
+  number: string;
+  isMyContact: boolean;
+  isBlocked: boolean;
+  profilePicUrl: string | null;
+  status: string | null;
+  lastSeenAt: number | null;
+  labels: string[] | null;
+  metadata: Record<string, unknown> | null;
+  syncVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt: string | null;
+}
+
+export interface ContactSyncResult {
+  success: boolean;
+  synced: number;
+  new: number;
+  updated: number;
+  message: string;
+}
+
+export interface ContactStats {
+  total: number;
+  myContacts: number;
+  blocked: number;
+  withProfilePic: number;
+  lastSynced: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  type: string;
+  timestamp: number;
+  from: string;
+  to: string;
+  fromMe: boolean;
+  hasMedia: boolean;
+  ack?: number;
+  quotedMessage?: {
+    id: string;
+    body: string;
+    from: string;
+  };
+}
+
+export interface Chat {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  timestamp?: number;
+  unreadCount: number;
+  lastMessage?: {
+    id: string;
+    body: string;
+    type: string;
+    timestamp: number;
+    from: string;
+    fromMe: boolean;
+  };
+  pinned?: boolean;
+  archived?: boolean;
+}
+
+export interface ChatDb {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  name: string | null;
+  isGroup: boolean;
+  archived: boolean;
+  pinned: boolean;
+  timestamp: number | null;
+  unreadCount: number;
+  muteExpiration: number | null;
+  lastMessage: Record<string, unknown> | null;
+  syncVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt: string | null;
+}
+
+export interface ChatSyncResult {
+  success: boolean;
+  synced: number;
+  new: number;
+  updated: number;
+  totalMessages: number;
+  aborted: boolean;
+  message: string;
+}
+
+export interface ChatStats {
+  total: number;
+  groups: number;
+  archived: number;
+  pinned: number;
+  unreadTotal: number;
+  lastSynced: string | null;
+}
+
+// =============================================================================
+// Contact & Chat API
+// =============================================================================
+
+export const contactsApi = {
+  // ========== DATABASE-STORED CONTACTS (RECOMMENDED) ==========
+
+  // Get contacts from database (with search, filter, sort)
+  listFromDb: (sessionId: string, options?: {
+    isMyContact?: boolean;
+    search?: string;
+    sortBy?: 'name' | 'number' | 'recent' | 'lastSeen';
+    order?: 'ASC' | 'DESC';
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.isMyContact !== undefined) params.set('isMyContact', String(options.isMyContact));
+    if (options?.search) params.set('search', options.search);
+    if (options?.sortBy) params.set('sortBy', options.sortBy);
+    if (options?.order) params.set('order', options.order);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.offset) params.set('offset', String(options.offset));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<ContactDb[]>(`/sessions/${sessionId}/contacts/db${query}`);
+  },
+
+  // Get single contact from database
+  getFromDb: (sessionId: string, contactId: string) =>
+    request<ContactDb>(`/sessions/${sessionId}/contacts/db/${contactId}`),
+
+  // Sync all contacts from WhatsApp to database
+  sync: (sessionId: string) =>
+    request<ContactSyncResult>(`/sessions/${sessionId}/contacts/sync`, { method: 'POST' }),
+
+  // Get contact statistics from database
+  getStats: (sessionId: string) =>
+    request<ContactStats>(`/sessions/${sessionId}/contacts/stats`),
+
+  // Delete all contacts for a session from database
+  deleteAllFromDb: (sessionId: string) =>
+    request<{ success: boolean; deleted: number; message: string }>(`/sessions/${sessionId}/contacts/db`, {
+      method: 'DELETE',
+    }),
+
+  // ========== LIVE WHATSAPP CONTACTS (DIRECT FETCH) ==========
+
+  // Get contacts directly from WhatsApp (real-time, not stored)
+  listLive: (sessionId: string) => request<Contact[]>(`/sessions/${sessionId}/contacts/live`),
+
+  // Get single contact directly from WhatsApp
+  getLive: (sessionId: string, contactId: string) =>
+    request<Contact>(`/sessions/${sessionId}/contacts/live/${contactId}`),
+
+  // Sync single contact to database
+  syncSingle: (sessionId: string, contactId: string) =>
+    request<{ success: boolean; contact: ContactDb | null; message: string }>(
+      `/sessions/${sessionId}/contacts/live/${contactId}/sync`,
+      { method: 'POST' }
+    ),
+
+  // ========== WHATSAPP OPERATIONS ==========
+
+  checkNumber: (sessionId: string, number: string) =>
+    request<{ number: string; exists: boolean; whatsappId: string | null }>(`/sessions/${sessionId}/contacts/check/${number}`),
+  getProfilePicture: (sessionId: string, contactId: string) =>
+    request<{ url: string }>(`/sessions/${sessionId}/contacts/${contactId}/profile-picture`),
+  block: (sessionId: string, contactId: string) =>
+    request<{ success: boolean; message: string }>(`/sessions/${sessionId}/contacts/${contactId}/block`, {
+      method: 'POST',
+    }),
+  unblock: (sessionId: string, contactId: string) =>
+    request<{ success: boolean; message: string }>(`/sessions/${sessionId}/contacts/${contactId}/block`, {
+      method: 'DELETE',
+    }),
+};
+
+export const chatsApi = {
+  // ========== DATABASE-STORED CHATS (RECOMMENDED) ==========
+
+  // Get chats from database (with search, filter, sort)
+  listFromDb: (sessionId: string, options?: {
+    isGroup?: boolean;
+    archived?: boolean;
+    pinned?: boolean;
+    search?: string;
+    sortBy?: 'name' | 'timestamp' | 'unread' | 'lastSynced';
+    order?: 'ASC' | 'DESC';
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.isGroup !== undefined) params.set('isGroup', String(options.isGroup));
+    if (options?.archived !== undefined) params.set('archived', String(options.archived));
+    if (options?.pinned !== undefined) params.set('pinned', String(options.pinned));
+    if (options?.search) params.set('search', options.search);
+    if (options?.sortBy) params.set('sortBy', options.sortBy);
+    if (options?.order) params.set('order', options.order);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.offset) params.set('offset', String(options.offset));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<ChatDb[]>(`/sessions/${sessionId}/chats${query}`);
+  },
+
+  // Sync all chats from WhatsApp to database with full message history
+  sync: (sessionId: string, options?: {
+    delayBetweenChatsMs?: number;
+    delayBetweenMessagesMs?: number;
+    maxMessagesPerChat?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.delayBetweenChatsMs !== undefined) params.set('delayBetweenChatsMs', String(options.delayBetweenChatsMs));
+    if (options?.delayBetweenMessagesMs !== undefined) params.set('delayBetweenMessagesMs', String(options.delayBetweenMessagesMs));
+    if (options?.maxMessagesPerChat !== undefined) params.set('maxMessagesPerChat', String(options.maxMessagesPerChat));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<ChatSyncResult>(`/sessions/${sessionId}/chats/sync/whatsapp${query}`, { method: 'POST' });
+  },
+
+  // Cancel ongoing chat sync
+  cancelSync: (sessionId: string) =>
+    request<{ success: boolean; message: string }>(`/sessions/${sessionId}/chats/sync/cancel`, { method: 'POST' }),
+
+  // Check if sync is in progress
+  getSyncStatus: (sessionId: string) =>
+    request<{ inProgress: boolean }>(`/sessions/${sessionId}/chats/sync/status`),
+
+  // Get chat statistics from database
+  getStats: (sessionId: string) =>
+    request<ChatStats>(`/sessions/${sessionId}/chats/stats/overview`),
+
+  // ========== LIVE WHATSAPP CHATS (DIRECT FETCH) ==========
+
+  // Get chats directly from WhatsApp (real-time, not stored)
+  listLive: (sessionId: string) => request<Chat[]>(`/sessions/${sessionId}/chats/live`),
+
+  // Get single chat directly from WhatsApp
+  getLive: (sessionId: string, chatId: string) => request<Chat>(`/sessions/${sessionId}/chats/${chatId}`),
+
+  // Get chat history
+  getHistory: (sessionId: string, chatId: string, limit?: number) =>
+    request<ChatMessage[]>(`/sessions/${sessionId}/chats/${chatId}/history${limit ? `?limit=${limit}` : ''}`),
+};
+
+// =============================================================================
 // Plugin Types
 // =============================================================================
 

@@ -16,6 +16,7 @@ import { InfraModule } from './modules/infra/infra.module';
 import { EventsModule } from './modules/events/events.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { GroupModule } from './modules/group/group.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { LabelModule } from './modules/label/label.module';
 import { ChannelModule } from './modules/channel/channel.module';
 import { CacheModule } from './common/cache';
@@ -65,12 +66,14 @@ if (process.env.QUEUE_ENABLED === 'true') {
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const dbType = configService.get<'sqlite' | 'postgres'>('dataDatabase.type', 'sqlite');
+        const dbType = configService.get<'sqlite' | 'postgres' | 'mongodb'>('dataDatabase.type', 'sqlite');
         const baseConfig = {
           entities: [
             __dirname + '/modules/session/**/*.entity{.ts,.js}',
             __dirname + '/modules/webhook/**/*.entity{.ts,.js}',
             __dirname + '/modules/message/**/*.entity{.ts,.js}',
+            __dirname + '/modules/contact/**/*.entity{.ts,.js}',
+            __dirname + '/modules/chat/**/*.entity{.ts,.js}',
           ],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           logging: configService.get<boolean>('dataDatabase.logging', false),
@@ -84,7 +87,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
             port: configService.get<number>('dataDatabase.port'),
             username: configService.get<string>('dataDatabase.username'),
             password: configService.get<string>('dataDatabase.password'),
-            database: 'openwa',
+            database: configService.get<string>('dataDatabase.name', 'openwa'),
             // Never auto-sync Postgres in production; rely on migrations.
             synchronize: configService.get<boolean>('dataDatabase.synchronize', false),
             migrationsRun: true,
@@ -93,6 +96,24 @@ if (process.env.QUEUE_ENABLED === 'true') {
             extra: {
               max: configService.get<number>('dataDatabase.poolSize', 10),
             },
+          };
+        }
+
+        if (dbType === 'mongodb') {
+          const mongoUrl = configService.get<string>('dataDatabase.url') ||
+            `mongodb://${configService.get<string>('dataDatabase.username')}:${configService.get<string>('dataDatabase.password')}@${configService.get<string>('dataDatabase.host')}:${configService.get<number>('dataDatabase.port', 27017)}/${configService.get<string>('dataDatabase.name', 'openwa')}?authSource=admin`;
+
+          return {
+            ...baseConfig,
+            type: 'mongodb' as const,
+            url: mongoUrl,
+            database: configService.get<string>('dataDatabase.name', 'openwa'),
+            // MongoDB uses synchronize to auto-create collections
+            synchronize: configService.get<boolean>('dataDatabase.synchronize', true),
+            // MongoDB doesn't use traditional migrations
+            migrationsRun: false,
+            retryAttempts: 10,
+            retryDelay: 3000,
           };
         }
 
@@ -153,6 +174,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
     InfraModule,
     ContactModule,
     GroupModule,
+    ChatModule, // Phase 3: Chat History
     LabelModule, // Phase 3: Labels Management
     ChannelModule, // Phase 3: Channels/Newsletter
     StatsModule, // Phase 3: Statistics Dashboard

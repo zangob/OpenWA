@@ -56,6 +56,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "sessions": "Sessions",
+    "contacts": "Contacts & Chats",
     "webhooks": "Webhooks",
     "apiKeys": "API Keys",
     "messageTester": "Message Tester",
@@ -464,6 +465,84 @@
     },
     "toasts": {
       "saveFailed": "Save Failed"
+    }
+  },
+  "contacts": {
+    "title": "Contacts & Chats",
+    "subtitle": "View conversations and send messages",
+    "loading": "Loading contacts...",
+    "searchPlaceholder": "Search contacts or chats...",
+    "sort": {
+      "recent": "Most Recent",
+      "name": "Name (A-Z)",
+      "number": "Phone Number",
+      "lastSeen": "Last Seen"
+    },
+    "filter": {
+      "myContacts": "My Contacts",
+      "groups": "Groups Only"
+    },
+    "dbMode": "Database",
+    "dbModeDesc": "Use cached contacts from database (faster, persistent)",
+    "liveMode": "Live",
+    "liveModeDesc": "Fetch contacts directly from WhatsApp (real-time)",
+    "sync": "Sync Contacts",
+    "syncing": "Syncing...",
+    "syncNow": "Sync Now",
+    "syncSuccess": "Sync Complete",
+    "syncError": "Sync Failed",
+    "stats": {
+      "total": "Total",
+      "myContacts": "My Contacts",
+      "blocked": "Blocked",
+      "withPic": "With Photo",
+      "lastSync": "Last Sync"
+    },
+    "myContact": "My Contact",
+    "neverSynced": "Never",
+    "noSessions": "No active sessions available",
+    "you": "You",
+    "group": "Group",
+    "noMessages": "No messages yet",
+    "noHistory": "No message history",
+    "selectChat": "Select a chat",
+    "selectChatDesc": "Choose a conversation from the list to view messages",
+    "messagePlaceholder": "Type a message...",
+    "messageSent": "Message Sent",
+    "messageSentDesc": "Your message has been delivered",
+    "empty": {
+      "title": "No chats found",
+      "description": "Start a conversation in WhatsApp to see it here"
+    },
+    "errorTitle": "Error",
+    "errorFetch": "Failed to fetch contacts and chats",
+    "errorHistory": "Failed to load chat history",
+    "errorSend": "Failed to send message"
+  },
+  "chats": {
+    "dbMode": "DB Chats",
+    "dbModeDesc": "Use cached chats from database (faster, persistent)",
+    "liveMode": "Live Chats",
+    "liveModeDesc": "Fetch chats directly from WhatsApp (real-time)",
+    "sync": "Sync Chats",
+    "syncing": "Syncing Chats...",
+    "cancelSync": "Cancel Sync",
+    "syncSuccess": "Chats Synced",
+    "syncError": "Chat Sync Failed",
+    "syncInProgress": "Sync Already Running",
+    "syncInProgressDesc": "A chat sync is already in progress for this session",
+    "syncCancelRequested": "Sync Cancelled",
+    "syncCancelDesc": "Sync cancellation requested. Downloaded data is saved.",
+    "noSyncInProgress": "No Sync Running",
+    "noSyncInProgressDesc": "There is no chat sync currently in progress",
+    "syncCancelError": "Cancel Failed",
+    "withMessages": "with {{count}} messages",
+    "stats": {
+      "total": "Chats",
+      "groups": "Groups",
+      "archived": "Archived",
+      "pinned": "Pinned",
+      "lastSync": "Last Sync"
     }
   },
   "plugins": {

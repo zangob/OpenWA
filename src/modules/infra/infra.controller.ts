@@ -27,10 +27,12 @@ interface InfraStatus {
 
 interface SaveConfigDto {
   database?: {
-    type: 'sqlite' | 'postgres';
+    type: 'sqlite' | 'postgres' | 'mongodb';
     builtIn?: boolean;
     host?: string;
     port?: string;
+    url?: string;
+    name?: string;
     username?: string;
     password?: string;
     database?: string;
@@ -242,6 +244,22 @@ export class InfraController {
           }
           envLines.push(`DATABASE_POOL_SIZE=${config.database.poolSize || 10}`);
           envLines.push(`DATABASE_SSL=${config.database.sslEnabled ? 'true' : 'false'}`);
+        } else if (config.database.type === 'mongodb') {
+          if (config.database.url) {
+            // MongoDB connection string provided
+            envLines.push(`DATABASE_URL=${config.database.url}`);
+          } else {
+            // Build MongoDB URL from parts
+            envLines.push(`DATABASE_HOST=${config.database.host || 'localhost'}`);
+            envLines.push(`DATABASE_PORT=${config.database.port || '27017'}`);
+            if (config.database.username) {
+              envLines.push(`DATABASE_USERNAME=${config.database.username}`);
+            }
+            if (config.database.password) {
+              envLines.push(`DATABASE_PASSWORD=${config.database.password}`);
+            }
+            envLines.push(`DATABASE_NAME=${config.database.name || config.database.database || 'openwa'}`);
+          }
         }
         envLines.push('');
       }

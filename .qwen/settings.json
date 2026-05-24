@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx *)",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npm view *)",
+      "Bash(npm config *)",
+      "Bash(type *)",
+      "Bash(findstr *)",
+      "Read(C:\\Users\\EElgezany\\.qwen\\projects\\c--users-eelgezany-desktop-openwa/**)",
+      "Read(C:\\Users\\EElgezany/**)",
+      "Bash(npm ls *)",
+      "Bash(dir *)",
+      "Bash(npm cache *)"
+    ]
+  },
+  "$version": 4
+}

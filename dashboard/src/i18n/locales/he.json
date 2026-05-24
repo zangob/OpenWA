@@ -56,6 +56,7 @@
   "nav": {
     "dashboard": "דאשבורד",
     "sessions": "Sessions",
+    "contacts": "אנשי קשר וצ'אטים",
     "webhooks": "Webhooks",
     "apiKeys": "מפתחות API",
     "messageTester": "בדיקת הודעות",
@@ -464,6 +465,75 @@
     },
     "toasts": {
       "saveFailed": "השמירה נכשלה"
+    }
+  },
+  "contacts": {
+    "title": "אנשי קשר וצ'אטים",
+    "subtitle": "צפייה בשיחות ושליחת הודעות",
+    "loading": "טוען אנשי קשר...",
+    "searchPlaceholder": "חיפוש אנשי קשר או צ'אטים...",
+    "sort": {
+      "recent": "הכי עדכני",
+      "name": "שם (א-ת)",
+      "number": "מספר טלפון",
+      "lastSeen": "נראה לאחרונה"
+    },
+    "filter": {
+      "myContacts": "אנשי הקשר שלי",
+      "groups": "רק קבוצות"
+    },
+    "dbMode": "מסד נתונים",
+    "dbModeDesc": "השתמש באנשי קשר ממוסד הנתונים (מהיר יותר, לא אובד באיבוד)",
+    "liveMode": "חי",
+    "liveModeDesc": "הבא אנשי קשר ישירות מ-WhatsApp (בזמן אמת)",
+    "sync": "סנכרון אנשי קשר",
+    "syncing": "מסנכרן...",
+    "syncNow": "סנכרן עכשיו",
+    "syncSuccess": "הסנכרון השלים",
+    "syncError": "הסנכרון נכשל",
+    "stats": {
+      "total": "סה\"כ",
+      "myContacts": "אנשי הקשר שלי",
+      "blocked": "חסומים",
+      "withPic": "עם תמונה",
+      "lastSync": "סנכרון אחרון"
+    },
+    "myContact": "איש קשר שלי",
+    "neverSynced": "לא סונכרן",
+    "noSessions": "אין Sessions פעילים זמינים",
+    "you": "את/ה",
+    "group": "קבוצה",
+    "noMessages": "אין הודעות עדיין",
+    "noHistory": "אין היסטוריית הודעות",
+    "selectChat": "בחר/י צ'אט",
+    "selectChatDesc": "בחר/י שיחה מהרשימה כדי לצפות בהודעות",
+    "messagePlaceholder": "הקלד/י הודעה...",
+    "messageSent": "הודעה נשלחה",
+    "messageSentDesc": "ההודעה שלך נמסרה",
+    "empty": {
+      "title": "לא נמצאו צ'אטים",
+      "description": "התחל/י שיחה ב-WhatsApp כדי לראות אותה כאן"
+    },
+    "errorTitle": "שגיאה",
+    "errorFetch": "טעינת אנשי הקשר והצ'אטים נכשלה",
+    "errorHistory": "טעינת היסטוריית ההודעות נכשלה",
+    "errorSend": "שליחת ההודעה נכשלה"
+  },
+  "chats": {
+    "dbMode": "צ'אטים ממסד נתונים",
+    "dbModeDesc": "השתמש בצ'אטים ממסד הנתונים (מהיר יותר, לא אובד באיבוד)",
+    "liveMode": "צ'אטים חיים",
+    "liveModeDesc": "הבא צ'אטים ישירות מ-WhatsApp (בזמן אמת)",
+    "sync": "סנכרון צ'אטים",
+    "syncing": "מסנכרן צ'אטים...",
+    "syncSuccess": "הצ'אטים סונכרנו",
+    "syncError": "סנכרון הצ'אטים נכשל",
+    "stats": {
+      "total": "צ'אטים",
+      "groups": "קבוצות",
+      "archived": "בארכיון",
+      "pinned": "מסומנים",
+      "lastSync": "סנכרון אחרון"
     }
   },
   "plugins": {

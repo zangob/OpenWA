@@ -63,7 +63,7 @@ export class WebhookProcessor extends WorkerHost {
       }
 
       // Update lastTriggeredAt on successful delivery
-      await this.webhookRepository.update(webhookId, {
+      await this.webhookRepository.update({ id: webhookId }, {
         lastTriggeredAt: new Date(),
       });
 

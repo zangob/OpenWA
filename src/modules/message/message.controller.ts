@@ -1,9 +1,17 @@
-import { Controller, Post, Get, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { Controller, Post, Get, Param, Body, Query, HttpCode, HttpStatus, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { MessageService } from './message.service';
 import { BulkMessageService } from './bulk-message.service';
+import { BulkUploadService, ParsedPhoneNumber } from './bulk-upload.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
 import { SendBulkMessageDto, BulkMessageResponseDto } from './dto/bulk-message.dto';
+import { 
+  BulkUploadOptionsDto, 
+  BulkUploadMessageDto, 
+  BulkUploadResponseDto,
+  PhoneColumnType,
+} from './dto/bulk-upload.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
 import { ApiKeyRole } from '../auth/entities/api-key.entity';
 
@@ -13,6 +21,7 @@ export class MessageController {
   constructor(
     private readonly messageService: MessageService,
     private readonly bulkMessageService: BulkMessageService,
+    private readonly bulkUploadService: BulkUploadService,
   ) {}
 
   @Get()
@@ -280,6 +289,225 @@ export class MessageController {
   }
 
   // ========== Bulk Messaging ==========
+
+  @Post('send-bulk-file')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Upload CSV/Excel file with phone numbers and send bulk messages' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiBody({
+    description: 'CSV or Excel file with phone numbers and optional message data',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'CSV or Excel file (.csv, .xlsx, .xls)',
+        },
+        type: {
+          type: 'string',
+          enum: ['text', 'image', 'video', 'audio', 'document'],
+          default: 'text',
+          description: 'Message type',
+        },
+        text: {
+          type: 'string',
+          description: 'Message text. Use {columnName} for variables from file',
+          example: 'Hello {name}! Your order #{order_id} is ready.',
+        },
+        mediaUrl: {
+          type: 'string',
+          description: 'Media URL for image/video/audio/document messages',
+        },
+        mediaBase64: {
+          type: 'string',
+          description: 'Media base64 (alternative to URL)',
+        },
+        mimetype: {
+          type: 'string',
+          description: 'Media MIME type',
+          example: 'image/jpeg',
+        },
+        filename: {
+          type: 'string',
+          description: 'Document filename',
+          example: 'document.pdf',
+        },
+        phoneColumn: {
+          type: 'string',
+          enum: ['phone', 'mobile', 'number', 'whatsapp', 'custom'],
+          default: 'phone',
+          description: 'Phone number column name/type',
+        },
+        customColumnName: {
+          type: 'string',
+          description: 'Custom column name (if phoneColumn is custom)',
+          example: 'mobile_number',
+        },
+        countryCode: {
+          type: 'string',
+          description: 'Country code to prepend if missing (e.g., +62, 62)',
+          example: '+62',
+        },
+        delayBetweenMessages: {
+          type: 'number',
+          description: 'Delay between messages in ms (min: 1000, default: 3000)',
+          default: 3000,
+        },
+        randomizeDelay: {
+          type: 'boolean',
+          description: 'Add random 0-2s to delay',
+          default: true,
+        },
+        stopOnError: {
+          type: 'boolean',
+          description: 'Stop batch on first error',
+          default: false,
+        },
+        maxNumbers: {
+          type: 'number',
+          description: 'Maximum numbers to process (0 = unlimited)',
+          default: 0,
+        },
+        skipRows: {
+          type: 'number',
+          description: 'Skip first N rows (for header rows)',
+          default: 0,
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Batch created and processing started',
+    type: BulkUploadResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid file format, no valid phone numbers found, or session not active',
+  })
+  async sendBulkFromFile(
+    @Param('sessionId') sessionId: string,
+    @UploadedFile() file: { fieldname: string; originalname: string; encoding: string; mimetype: string; buffer: Buffer; size: number },
+    @Body() body: {
+      type?: string;
+      text?: string;
+      mediaUrl?: string;
+      mediaBase64?: string;
+      mimetype?: string;
+      filename?: string;
+      phoneColumn?: string;
+      customColumnName?: string;
+      countryCode?: string;
+      delayBetweenMessages?: string;
+      randomizeDelay?: string;
+      stopOnError?: string;
+      maxNumbers?: string;
+      skipRows?: string;
+    },
+  ): Promise<BulkUploadResponseDto> {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    // Validate message type
+    const messageType = body.type || 'text';
+    const validTypes = ['text', 'image', 'video', 'audio', 'document'];
+    if (!validTypes.includes(messageType)) {
+      throw new BadRequestException(`Invalid message type: ${messageType}. Use: ${validTypes.join(', ')}`);
+    }
+
+    // Validate text content for text messages
+    if (messageType === 'text' && !body.text) {
+      throw new BadRequestException('Message text is required for text messages');
+    }
+
+    // Parse file and extract phone numbers
+    const parseOptions = {
+      phoneColumn: body.phoneColumn as PhoneColumnType,
+      customColumnName: body.customColumnName,
+      skipRows: parseInt(body.skipRows || '0', 10),
+      maxNumbers: parseInt(body.maxNumbers || '0', 10),
+    };
+
+    const { numbers, invalid, headers } = this.bulkUploadService.parseFile(
+      file.buffer,
+      file.mimetype,
+      parseOptions,
+    );
+
+    if (numbers.length === 0) {
+      throw new BadRequestException(
+        `No valid phone numbers found. Invalid entries: ${invalid.map(i => `${i.original} (${i.error})`).join(', ')}`,
+      );
+    }
+
+    // Add country code if provided and numbers don't have it
+    let finalNumbers = numbers;
+    if (body.countryCode) {
+      finalNumbers = this.bulkUploadService.addCountryCode(numbers, body.countryCode);
+    }
+
+    // Build messages from file data
+    const messages = finalNumbers.map(num => {
+      // Apply template variables to text
+      const text = body.text 
+        ? this.bulkUploadService.applyVariables(body.text, num.rowData)
+        : '';
+
+      return {
+        chatId: num.chatId,
+        type: messageType as any,
+        content: {
+          text: messageType === 'text' ? text : undefined,
+          caption: messageType !== 'text' ? text : undefined,
+          image: messageType === 'image' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
+          video: messageType === 'video' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
+          audio: messageType === 'audio' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
+          document: messageType === 'document' ? { 
+            url: body.mediaUrl, 
+            base64: body.mediaBase64, 
+            mimetype: body.mimetype,
+            filename: body.filename,
+          } : undefined,
+        },
+        variables: num.rowData,
+      };
+    });
+
+    // Create bulk message DTO
+    const bulkDto: SendBulkMessageDto = {
+      messages,
+      options: {
+        delayBetweenMessages: parseInt(body.delayBetweenMessages || '3000', 10),
+        randomizeDelay: body.randomizeDelay !== 'false',
+        stopOnError: body.stopOnError === 'true',
+      },
+    };
+
+    // Create batch
+    const batch = await this.bulkMessageService.createBatch(sessionId, bulkDto);
+    const estimatedTime = new Date(
+      Date.now() + batch.messages.length * (batch.options?.delayBetweenMessages || 3000),
+    );
+
+    return {
+      batchId: batch.batchId,
+      status: batch.status,
+      totalNumbers: numbers.length + invalid.length,
+      validNumbers: numbers.length,
+      invalidNumbers: invalid.length,
+      invalidNumbersList: invalid.slice(0, 10).map(i => `${i.original}: ${i.error}`), // Show first 10
+      estimatedCompletionTime: estimatedTime.toISOString(),
+      statusUrl: `/api/sessions/${sessionId}/messages/batch/${batch.batchId}`,
+      message: `Bulk messaging started with ${numbers.length} valid numbers. Invalid: ${invalid.length}. ` +
+        `Column '${body.phoneColumn || 'auto-detect'}' used. Headers found: ${headers.join(', ')}`,
+    };
+  }
 
   @Post('send-bulk')
   @RequireRole(ApiKeyRole.OPERATOR)

@@ -1,20 +1,33 @@
 import {
   Entity,
   Column,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
+  ObjectIdColumn,
+  BeforeInsert,
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 import { Session } from '../../session/entities/session.entity';
 import { DateTransformer } from '../../../common/transformers/date.transformer';
 import { jsonColumnType, dateColumnType } from '../../../common/utils/column-types';
 
 @Entity('webhooks')
 export class Webhook {
-  @PrimaryGeneratedColumn('uuid')
+  @ObjectIdColumn()
+  _id?: any;
+
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) {
+      this.id = uuidv4();
+    }
+  }
 
   @Column({ type: 'uuid' })
   sessionId: string;

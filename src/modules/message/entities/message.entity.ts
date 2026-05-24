@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryColumn, ObjectIdColumn, BeforeInsert, Column, CreateDateColumn, Index } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 import { jsonColumnType } from '../../../common/utils/column-types';
 
 export enum MessageDirection {
@@ -18,8 +19,18 @@ export enum MessageStatus {
 @Index(['sessionId', 'createdAt'])
 @Index(['chatId'])
 export class Message {
-  @PrimaryGeneratedColumn('uuid')
+  @ObjectIdColumn()
+  _id?: any;
+
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) {
+      this.id = uuidv4();
+    }
+  }
 
   @Column()
   @Index()
