@@ -1,0 +1,24 @@
+# OpenWA - Standalone Redis for the durable Campaign/Queue feature.
+#
+# The bulk Campaign feature requires Redis + BullMQ. Start Redis with:
+#   docker compose -f docker-compose.redis.yml up -d
+#
+# Then run the API with QUEUE_ENABLED=true and REDIS_HOST=localhost (see .env.example).
+services:
+  redis:
+    restart: unless-stopped
+    image: redis/redis-stack-server:latest
+    container_name: openwa-redis-stack
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./data/redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+    name: openwa-network

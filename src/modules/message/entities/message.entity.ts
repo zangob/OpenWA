@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, ObjectIdColumn, BeforeInsert, Column, CreateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryColumn, BeforeInsert, Column, CreateDateColumn, Index } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { jsonColumnType } from '../../../common/utils/column-types';
 
@@ -19,9 +19,6 @@ export enum MessageStatus {
 @Index(['sessionId', 'createdAt'])
 @Index(['chatId'])
 export class Message {
-  @ObjectIdColumn()
-  _id?: any;
-
   @PrimaryColumn('uuid')
   id: string;
 

@@ -237,6 +237,20 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
   }
 
   /**
+   * Emit bulk-campaign progress (sent/failed/pending counts + current index).
+   */
+  emitBatchProgress(sessionId: string, data: Record<string, unknown>) {
+    this.emitToRooms(sessionId, 'batch.progress', data);
+  }
+
+  /**
+   * Emit a bulk-campaign lifecycle status change (running/paused/completed/...).
+   */
+  emitBatchStatus(sessionId: string, data: Record<string, unknown>) {
+    this.emitToRooms(sessionId, 'batch.status', data);
+  }
+
+  /**
    * Emit webhook delivery status (broadcast to all - no session context)
    */
   emitWebhookStatus(webhookId: string, success: boolean, error?: string) {

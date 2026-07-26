@@ -1,0 +1,9 @@
+allowBuilds:
+  '@scarf/scarf': false
+  cpu-features: true
+  msgpackr-extract: true
+  protobufjs: true
+  puppeteer: true
+  sqlite3: true
+  ssh2: true
+  unrs-resolver: true

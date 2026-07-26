@@ -31,12 +31,19 @@ export { QUEUE_NAMES } from './queue-names';
       }),
     }),
     BullModule.registerQueue({ name: QUEUE_NAMES.WEBHOOK }),
+    // Campaign queue — the CampaignProcessor itself is registered in MessageModule
+    // (where SessionService + the MessageBatch repo live) to avoid an import cycle.
+    BullModule.registerQueue({ name: QUEUE_NAMES.CAMPAIGN }),
     BullBoardModule.forRoot({
       route: '/admin/queues',
       adapter: ExpressAdapter,
     }),
     BullBoardModule.forFeature({
       name: QUEUE_NAMES.WEBHOOK,
+      adapter: BullMQAdapter,
+    }),
+    BullBoardModule.forFeature({
+      name: QUEUE_NAMES.CAMPAIGN,
       adapter: BullMQAdapter,
     }),
   ],

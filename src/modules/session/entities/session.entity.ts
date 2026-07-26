@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryColumn, ObjectIdColumn, BeforeInsert, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, BeforeInsert, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTransformer } from '../../../common/transformers/date.transformer';
 import { jsonColumnType, dateColumnType } from '../../../common/utils/column-types';
@@ -15,9 +15,6 @@ export enum SessionStatus {
 
 @Entity('sessions')
 export class Session {
-  @ObjectIdColumn()
-  _id?: any;
-
   @PrimaryColumn('uuid')
   id: string;
 

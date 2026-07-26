@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryColumn, ObjectIdColumn, BeforeInsert, CreateDateColumn, UpdateDateColumn, Index, Unique } from 'typeorm';
+import { Entity, Column, PrimaryColumn, BeforeInsert, CreateDateColumn, UpdateDateColumn, Index, Unique } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -11,9 +11,6 @@ import { v4 as uuidv4 } from 'uuid';
 @Index(['sessionId', 'isGroup'])
 @Index(['sessionId', 'name'])
 export class Chat {
-  @ObjectIdColumn()
-  _id?: any;
-
   @PrimaryColumn('uuid')
   id: string;
 

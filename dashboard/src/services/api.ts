@@ -218,6 +218,132 @@ export const webhookApi = {
 };
 
 // =============================================================================
+// Campaign (bulk messaging) API
+// =============================================================================
+
+export type CampaignStatus =
+  | 'draft'
+  | 'test_sent'
+  | 'pending'
+  | 'processing'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export interface CampaignProgress {
+  total: number;
+  sent: number;
+  failed: number;
+  pending: number;
+  cancelled: number;
+}
+
+export interface CampaignRecipient {
+  chatId: string;
+  name: string;
+  type: 'number' | 'group';
+}
+
+export interface CampaignMessageTemplate {
+  type: 'text' | 'image';
+  text?: string;
+  image?: { base64?: string; url?: string; mimetype?: string };
+}
+
+export interface CampaignResultItem {
+  chatId: string;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  messageId?: string;
+  error?: { code: string; message: string };
+  sentAt?: string;
+}
+
+export interface Campaign {
+  batchId: string;
+  sessionId: string;
+  name: string | null;
+  status: CampaignStatus;
+  message: CampaignMessageTemplate | null;
+  recipients: CampaignRecipient[] | null;
+  progress: CampaignProgress;
+  options?: { delayBetweenMessages: number; randomizeDelay: boolean };
+  currentIndex: number;
+  test: { chatId: string | null; messageId: string | null; sentAt: string | null };
+  results: CampaignResultItem[] | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateCampaignPayload {
+  name?: string;
+  message: CampaignMessageTemplate;
+  recipients: {
+    numbers?: { name: string; phone: string }[];
+    groups?: string[];
+  };
+  defaultCountryCode?: string;
+}
+
+export interface CreateCampaignResult extends Campaign {
+  validRecipients: number;
+  invalidRecipients: number;
+  invalid: { input: string; reason: string }[];
+}
+
+export interface MediaUploadResult {
+  path: string;
+  url: string;
+  mimetype: string;
+  size: number;
+  originalName: string;
+}
+
+export const mediaApi = {
+  upload: async (file: File): Promise<MediaUploadResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/infra/media/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(err.message || 'Upload failed');
+    }
+    return res.json();
+  },
+};
+
+export const campaignApi = {
+  list: (sessionId: string) => request<Campaign[]>(`/sessions/${sessionId}/campaigns`),
+  get: (sessionId: string, batchId: string) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}`),
+  create: (sessionId: string, payload: CreateCampaignPayload) =>
+    request<CreateCampaignResult>(`/sessions/${sessionId}/campaigns`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  test: (sessionId: string, batchId: string, phone: string) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
+  start: (sessionId: string, batchId: string, delaySeconds: number, randomizeDelay = true) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ delaySeconds, randomizeDelay }),
+    }),
+  pause: (sessionId: string, batchId: string) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}/pause`, { method: 'POST' }),
+  resume: (sessionId: string, batchId: string) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}/resume`, { method: 'POST' }),
+  cancel: (sessionId: string, batchId: string) =>
+    request<Campaign>(`/sessions/${sessionId}/campaigns/${batchId}/cancel`, { method: 'POST' }),
+};
+
+// =============================================================================
 // API Key API
 // =============================================================================
 

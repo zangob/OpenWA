@@ -2,7 +2,6 @@ import {
   Entity,
   Column,
   PrimaryColumn,
-  ObjectIdColumn,
   BeforeInsert,
   CreateDateColumn,
   UpdateDateColumn,
@@ -16,9 +15,6 @@ import { jsonColumnType, dateColumnType } from '../../../common/utils/column-typ
 
 @Entity('webhooks')
 export class Webhook {
-  @ObjectIdColumn()
-  _id?: any;
-
   @PrimaryColumn('uuid')
   id: string;
 

@@ -60,6 +60,7 @@
     "webhooks": "Webhooks",
     "apiKeys": "API Keys",
     "messageTester": "Message Tester",
+    "campaigns": "Campaigns",
     "infrastructure": "Infrastructure",
     "plugins": "Plugins",
     "logs": "Logs"

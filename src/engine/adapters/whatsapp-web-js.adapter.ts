@@ -318,9 +318,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       caption: media.caption,
     });
 
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
+
+    // whatsapp-web.js sometimes returns undefined even on success — synthesize a result
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `media_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
