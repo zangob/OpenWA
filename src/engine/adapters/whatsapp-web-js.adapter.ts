@@ -274,9 +274,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
     this.ensureReady();
     const msg = await this.client!.sendMessage(chatId, text);
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `text_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
@@ -516,9 +522,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       address: location.address || '',
     });
     const msg = await this.client!.sendMessage(chatId, loc);
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `loc_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
@@ -536,9 +548,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await this.client!.sendMessage(chatId, vcard, {
       parseVCards: true,
     });
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `contact_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
@@ -559,9 +577,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await this.client!.sendMessage(chatId, messageMedia, {
       sendMediaAsSticker: true,
     });
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `sticker_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
@@ -577,9 +601,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     }
 
     const msg = await quotedMsg.reply(text);
+    if (msg?.id) {
+      return {
+        id: msg.id._serialized,
+        timestamp: msg.timestamp,
+      };
+    }
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: `reply_${Date.now()}`,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
