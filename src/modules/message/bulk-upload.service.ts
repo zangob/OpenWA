@@ -51,11 +51,11 @@ export class BulkUploadService {
 
       // Determine phone column name
       const phoneColumnName = this.getPhoneColumnName(headers, options.phoneColumn, options.customColumnName);
-      
+
       if (!phoneColumnName) {
         throw new BadRequestException(
           `Could not find phone number column. Available columns: ${headers.join(', ')}. ` +
-          `Please specify phoneColumn or customColumnName.`,
+            `Please specify phoneColumn or customColumnName.`,
         );
       }
 
@@ -87,7 +87,7 @@ export class BulkUploadService {
         }
 
         const validation = this.validateAndFormatPhone(rawPhone.trim());
-        
+
         if (validation.valid) {
           numbers.push({
             original: rawPhone.trim(),
@@ -105,7 +105,9 @@ export class BulkUploadService {
       return { numbers, invalid, headers };
     } catch (error) {
       this.logger.error('Failed to parse file', error);
-      throw new BadRequestException(`Failed to parse file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new BadRequestException(
+        `Failed to parse file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -114,7 +116,7 @@ export class BulkUploadService {
    */
   private parseCSV(buffer: Buffer, skipRows: number): { data: Record<string, string>[]; headers: string[] } {
     const csvText = buffer.toString('utf-8');
-    
+
     const result = Papa.parse<Record<string, string>>(csvText, {
       header: true,
       skipEmptyLines: true,
@@ -142,7 +144,7 @@ export class BulkUploadService {
    */
   private parseExcel(buffer: Buffer, skipRows: number): { data: Record<string, string>[]; headers: string[] } {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
-    
+
     // Use first sheet
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!firstSheet) {
@@ -151,7 +153,7 @@ export class BulkUploadService {
 
     // Convert to JSON
     const rawData: unknown[] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-    
+
     if (rawData.length === 0) {
       return { data: [], headers: [] };
     }
@@ -209,7 +211,7 @@ export class BulkUploadService {
       ...columnMappings[PhoneColumnType.NUMBER],
       ...columnMappings[PhoneColumnType.WHATSAPP],
     ];
-    
+
     return headers.find(h => allPossibleNames.includes(h.toLowerCase())) || null;
   }
 
@@ -219,12 +221,12 @@ export class BulkUploadService {
   private validateAndFormatPhone(rawPhone: string): PhoneNumberValidationResult {
     // Remove all non-numeric characters except + at start
     let cleaned = rawPhone.replace(/\s/g, '').replace(/[()-]/g, '');
-    
+
     // Handle country code
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
-    
+
     // Remove leading zeros if more than 10 digits (likely already has country code)
     if (cleaned.length > 10 && cleaned.startsWith('0')) {
       cleaned = cleaned.substring(1);

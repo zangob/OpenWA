@@ -1,13 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  IsBoolean,
-  IsEnum,
-  Min,
-  Max,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsEnum, Min, Max } from 'class-validator';
 
 export enum PhoneColumnType {
   PHONE = 'phone',
@@ -25,7 +17,7 @@ export enum FileType {
 }
 
 export class BulkUploadOptionsDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Phone number column name or type',
     enum: PhoneColumnType,
     default: PhoneColumnType.PHONE,
@@ -34,7 +26,7 @@ export class BulkUploadOptionsDto {
   @IsEnum(PhoneColumnType)
   phoneColumn?: PhoneColumnType;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Custom column name (if phoneColumn is CUSTOM)',
     example: 'mobile_number',
   })
@@ -42,7 +34,7 @@ export class BulkUploadOptionsDto {
   @IsString()
   customColumnName?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Skip first N rows (header rows)',
     default: 1,
   })
@@ -51,7 +43,7 @@ export class BulkUploadOptionsDto {
   @Min(0)
   skipRows?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Country code to prepend if missing (e.g., +62, 62)',
     example: '+62',
   })
@@ -59,7 +51,7 @@ export class BulkUploadOptionsDto {
   @IsString()
   countryCode?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Delay between messages in ms (min: 1000, default: 3000)',
     default: 3000,
   })
@@ -69,7 +61,7 @@ export class BulkUploadOptionsDto {
   @Max(60000)
   delayBetweenMessages?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Add random 0-2s to delay',
     default: true,
   })
@@ -77,7 +69,7 @@ export class BulkUploadOptionsDto {
   @IsBoolean()
   randomizeDelay?: boolean;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Stop batch on first error',
     default: false,
   })
@@ -85,7 +77,7 @@ export class BulkUploadOptionsDto {
   @IsBoolean()
   stopOnError?: boolean;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Maximum numbers to process (0 = unlimited)',
     default: 0,
   })
@@ -96,7 +88,7 @@ export class BulkUploadOptionsDto {
 }
 
 export class BulkUploadMessageDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Message type',
     enum: ['text', 'image', 'video', 'audio', 'document'],
     example: 'text',
@@ -104,14 +96,14 @@ export class BulkUploadMessageDto {
   @IsEnum(['text', 'image', 'video', 'audio', 'document'])
   type: 'text' | 'image' | 'video' | 'audio' | 'document';
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Message text content (for text messages or captions)',
     example: 'Hello {name}! This is a bulk message.',
   })
   @IsString()
   text: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Media URL (for image/video/audio/document)',
     example: 'https://example.com/image.jpg',
   })
@@ -119,14 +111,14 @@ export class BulkUploadMessageDto {
   @IsString()
   mediaUrl?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Media base64 (alternative to URL)',
   })
   @IsOptional()
   @IsString()
   mediaBase64?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Media MIME type',
     example: 'image/jpeg',
   })
@@ -134,7 +126,7 @@ export class BulkUploadMessageDto {
   @IsString()
   mimetype?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Document filename',
     example: 'document.pdf',
   })

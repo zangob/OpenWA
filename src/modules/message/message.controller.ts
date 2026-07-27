@@ -1,4 +1,16 @@
-import { Controller, Post, Get, Param, Body, Query, HttpCode, HttpStatus, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { MessageService } from './message.service';
@@ -6,9 +18,9 @@ import { BulkMessageService } from './bulk-message.service';
 import { BulkUploadService, ParsedPhoneNumber } from './bulk-upload.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
 import { SendBulkMessageDto, BulkMessageResponseDto } from './dto/bulk-message.dto';
-import { 
-  BulkUploadOptionsDto, 
-  BulkUploadMessageDto, 
+import {
+  BulkUploadOptionsDto,
+  BulkUploadMessageDto,
   BulkUploadResponseDto,
   PhoneColumnType,
 } from './dto/bulk-upload.dto';
@@ -392,8 +404,10 @@ export class MessageController {
   })
   async sendBulkFromFile(
     @Param('sessionId') sessionId: string,
-    @UploadedFile() file: { fieldname: string; originalname: string; encoding: string; mimetype: string; buffer: Buffer; size: number },
-    @Body() body: {
+    @UploadedFile()
+    file: { fieldname: string; originalname: string; encoding: string; mimetype: string; buffer: Buffer; size: number },
+    @Body()
+    body: {
       type?: string;
       text?: string;
       mediaUrl?: string;
@@ -434,11 +448,7 @@ export class MessageController {
       maxNumbers: parseInt(body.maxNumbers || '0', 10),
     };
 
-    const { numbers, invalid, headers } = this.bulkUploadService.parseFile(
-      file.buffer,
-      file.mimetype,
-      parseOptions,
-    );
+    const { numbers, invalid, headers } = this.bulkUploadService.parseFile(file.buffer, file.mimetype, parseOptions);
 
     if (numbers.length === 0) {
       throw new BadRequestException(
@@ -455,9 +465,7 @@ export class MessageController {
     // Build messages from file data
     const messages = finalNumbers.map(num => {
       // Apply template variables to text
-      const text = body.text 
-        ? this.bulkUploadService.applyVariables(body.text, num.rowData)
-        : '';
+      const text = body.text ? this.bulkUploadService.applyVariables(body.text, num.rowData) : '';
 
       return {
         chatId: num.chatId,
@@ -465,15 +473,27 @@ export class MessageController {
         content: {
           text: messageType === 'text' ? text : undefined,
           caption: messageType !== 'text' ? text : undefined,
-          image: messageType === 'image' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
-          video: messageType === 'video' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
-          audio: messageType === 'audio' ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype } : undefined,
-          document: messageType === 'document' ? { 
-            url: body.mediaUrl, 
-            base64: body.mediaBase64, 
-            mimetype: body.mimetype,
-            filename: body.filename,
-          } : undefined,
+          image:
+            messageType === 'image'
+              ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype }
+              : undefined,
+          video:
+            messageType === 'video'
+              ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype }
+              : undefined,
+          audio:
+            messageType === 'audio'
+              ? { url: body.mediaUrl, base64: body.mediaBase64, mimetype: body.mimetype }
+              : undefined,
+          document:
+            messageType === 'document'
+              ? {
+                  url: body.mediaUrl,
+                  base64: body.mediaBase64,
+                  mimetype: body.mimetype,
+                  filename: body.filename,
+                }
+              : undefined,
         },
         variables: num.rowData,
       };
@@ -491,9 +511,7 @@ export class MessageController {
 
     // Create batch
     const batch = await this.bulkMessageService.createBatch(sessionId, bulkDto);
-    const estimatedTime = new Date(
-      Date.now() + batch.messages.length * (batch.options?.delayBetweenMessages || 3000),
-    );
+    const estimatedTime = new Date(Date.now() + batch.messages.length * (batch.options?.delayBetweenMessages || 3000));
 
     return {
       batchId: batch.batchId,
@@ -504,7 +522,8 @@ export class MessageController {
       invalidNumbersList: invalid.slice(0, 10).map(i => `${i.original}: ${i.error}`), // Show first 10
       estimatedCompletionTime: estimatedTime.toISOString(),
       statusUrl: `/api/sessions/${sessionId}/messages/batch/${batch.batchId}`,
-      message: `Bulk messaging started with ${numbers.length} valid numbers. Invalid: ${invalid.length}. ` +
+      message:
+        `Bulk messaging started with ${numbers.length} valid numbers. Invalid: ${invalid.length}. ` +
         `Column '${body.phoneColumn || 'auto-detect'}' used. Headers found: ${headers.join(', ')}`,
     };
   }

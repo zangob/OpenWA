@@ -7,7 +7,7 @@ import { AppModule } from './app.module';
 import { ShutdownService } from './common/services/shutdown.service';
 import express from 'express';
 
-  async function bootstrap() {
+async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));

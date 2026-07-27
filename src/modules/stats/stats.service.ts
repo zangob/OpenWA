@@ -76,14 +76,16 @@ export class StatsService {
       // MongoDB native aggregation
       const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
 
-      const messageStats = await mongoRepo.aggregate<{ _id: string; count: number }>([
-        { $group: { _id: '$direction', count: { $sum: 1 } } },
-      ]).toArray();
+      const messageStats = await mongoRepo
+        .aggregate<{ _id: string; count: number }>([{ $group: { _id: '$direction', count: { $sum: 1 } } }])
+        .toArray();
 
-      const todayStats = await mongoRepo.aggregate<{ _id: string; count: number }>([
-        { $match: { createdAt: { $gte: todayStart } } },
-        { $group: { _id: '$direction', count: { $sum: 1 } } },
-      ]).toArray();
+      const todayStats = await mongoRepo
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { createdAt: { $gte: todayStart } } },
+          { $group: { _id: '$direction', count: { $sum: 1 } } },
+        ])
+        .toArray();
 
       sent = messageStats.find(m => m._id === 'outgoing')?.count || 0;
       received = messageStats.find(m => m._id === 'incoming')?.count || 0;
@@ -114,7 +116,7 @@ export class StatsService {
 
     // Count failed messages
     const failed = await this.messageRepo.count({
-      where: { status: MessageStatus.FAILED } as any,
+      where: { status: MessageStatus.FAILED },
     });
 
     await this.cacheService.setSessionsStats({
@@ -135,7 +137,7 @@ export class StatsService {
 
     const timeSeries = await this.getTimeSeries(since, interval);
 
-    let byType: Record<string, number> = {};
+    const byType: Record<string, number> = {};
     let bySession: Array<{ sessionId: string; name: string; sent: number; received: number }> = [];
     let topChatsRaw: Array<{ chatId: string; messageCount: number }> = [];
 
@@ -143,19 +145,23 @@ export class StatsService {
       const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
 
       // By type
-      const byTypeRaw = await mongoRepo.aggregate<{ _id: string; count: number }>([
-        { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: '$type', count: { $sum: 1 } } },
-      ]).toArray();
+      const byTypeRaw = await mongoRepo
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { createdAt: { $gte: since } } },
+          { $group: { _id: '$type', count: { $sum: 1 } } },
+        ])
+        .toArray();
       for (const row of byTypeRaw) {
         byType[row._id || 'unknown'] = row.count;
       }
 
       // By session + direction
-      const bySessionRaw = await mongoRepo.aggregate<{ _id: { sessionId: string; direction: string }; count: number }>([
-        { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: { sessionId: '$sessionId', direction: '$direction' }, count: { $sum: 1 } } },
-      ]).toArray();
+      const bySessionRaw = await mongoRepo
+        .aggregate<{ _id: { sessionId: string; direction: string }; count: number }>([
+          { $match: { createdAt: { $gte: since } } },
+          { $group: { _id: { sessionId: '$sessionId', direction: '$direction' }, count: { $sum: 1 } } },
+        ])
+        .toArray();
 
       const sessionMap = new Map<string, { sent: number; received: number }>();
       for (const row of bySessionRaw) {
@@ -175,12 +181,14 @@ export class StatsService {
       }));
 
       // Top chats
-      const topRaw = await mongoRepo.aggregate<{ _id: string; messageCount: number }>([
-        { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: '$chatId', messageCount: { $sum: 1 } } },
-        { $sort: { messageCount: -1 } },
-        { $limit: 10 },
-      ]).toArray();
+      const topRaw = await mongoRepo
+        .aggregate<{ _id: string; messageCount: number }>([
+          { $match: { createdAt: { $gte: since } } },
+          { $group: { _id: '$chatId', messageCount: { $sum: 1 } } },
+          { $sort: { messageCount: -1 } },
+          { $limit: 10 },
+        ])
+        .toArray();
       topChatsRaw = topRaw.map(r => ({ chatId: r._id, messageCount: r.messageCount }));
     } else {
       // SQL path
@@ -239,7 +247,7 @@ export class StatsService {
   }
 
   async getSessionStats(sessionId: string): Promise<SessionStats> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } as any });
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Session not found');
 
     const todayStart = new Date();
@@ -252,31 +260,34 @@ export class StatsService {
     let hourlyActivity: Array<{ hour: number; sent: number; received: number }> = [];
 
     const failed = await this.messageRepo.count({
-      where: { sessionId, status: MessageStatus.FAILED } as any,
+      where: { sessionId, status: MessageStatus.FAILED },
     });
 
     if (this.isMongo) {
       const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
 
-      const stats = await mongoRepo.aggregate<{ _id: string; count: number }>([
-        { $match: { sessionId } },
-        { $group: { _id: '$direction', count: { $sum: 1 } } },
-      ]).toArray();
+      const stats = await mongoRepo
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { sessionId } },
+          { $group: { _id: '$direction', count: { $sum: 1 } } },
+        ])
+        .toArray();
       sent = stats.find(s => s._id === 'outgoing')?.count || 0;
       received = stats.find(s => s._id === 'incoming')?.count || 0;
 
-      const todayResult = await mongoRepo.aggregate<{ count: number }>([
-        { $match: { sessionId, createdAt: { $gte: todayStart } } },
-        { $count: 'count' },
-      ]).toArray();
+      const todayResult = await mongoRepo
+        .aggregate<{ count: number }>([{ $match: { sessionId, createdAt: { $gte: todayStart } } }, { $count: 'count' }])
+        .toArray();
       todayCount = todayResult[0]?.count || 0;
 
-      const topRaw = await mongoRepo.aggregate<{ _id: string; count: number; lastActive: Date }>([
-        { $match: { sessionId } },
-        { $group: { _id: '$chatId', count: { $sum: 1 }, lastActive: { $max: '$createdAt' } } },
-        { $sort: { count: -1 } },
-        { $limit: 10 },
-      ]).toArray();
+      const topRaw = await mongoRepo
+        .aggregate<{ _id: string; count: number; lastActive: Date }>([
+          { $match: { sessionId } },
+          { $group: { _id: '$chatId', count: { $sum: 1 }, lastActive: { $max: '$createdAt' } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+        ])
+        .toArray();
       topChats = topRaw.map(c => ({
         chatId: c._id,
         count: c.count,
@@ -328,42 +339,47 @@ export class StatsService {
   private getPeriodStart(period: '24h' | '7d' | '30d'): Date {
     const now = new Date();
     switch (period) {
-      case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      case '7d':  return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      case '30d': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case '24h':
+        return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      case '7d':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '30d':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
   }
 
   private async getTimeSeries(since: Date, interval: 'hour' | 'day'): Promise<TimeSeriesPoint[]> {
     if (this.isMongo) {
       const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
-      const dateFormat = interval === 'hour'
-        ? { year: '$year', month: '$month', day: '$dayOfMonth', hour: '$hour' }
-        : { year: '$year', month: '$month', day: '$dayOfMonth' };
+      const dateFormat =
+        interval === 'hour'
+          ? { year: '$year', month: '$month', day: '$dayOfMonth', hour: '$hour' }
+          : { year: '$year', month: '$month', day: '$dayOfMonth' };
 
-      const raw = await mongoRepo.aggregate<{
-        _id: Record<string, number>;
-        sent: number;
-        received: number;
-      }>([
-        { $match: { createdAt: { $gte: since } } },
-        {
-          $group: {
-            _id: Object.fromEntries(
-              Object.entries(dateFormat).map(([k, v]) => [k, { [v]: '$createdAt' }]),
-            ),
-            sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
-            received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
+      const raw = await mongoRepo
+        .aggregate<{
+          _id: Record<string, number>;
+          sent: number;
+          received: number;
+        }>([
+          { $match: { createdAt: { $gte: since } } },
+          {
+            $group: {
+              _id: Object.fromEntries(Object.entries(dateFormat).map(([k, v]) => [k, { [v]: '$createdAt' }])),
+              sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
+              received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
+            },
           },
-        },
-        { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.hour': 1 } },
-      ]).toArray();
+          { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.hour': 1 } },
+        ])
+        .toArray();
 
       return raw.map(r => {
         const d = r._id;
-        const ts = interval === 'hour'
-          ? `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hour || 0).padStart(2, '0')}:00:00`
-          : `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+        const ts =
+          interval === 'hour'
+            ? `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hour || 0).padStart(2, '0')}:00:00`
+            : `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
         return { timestamp: ts, sent: r.sent, received: r.received };
       });
     }
@@ -387,20 +403,24 @@ export class StatsService {
     }));
   }
 
-  private async getHourlyActivityMongo(sessionId: string): Promise<Array<{ hour: number; sent: number; received: number }>> {
+  private async getHourlyActivityMongo(
+    sessionId: string,
+  ): Promise<Array<{ hour: number; sent: number; received: number }>> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
 
-    const raw = await mongoRepo.aggregate<{ _id: number; sent: number; received: number }>([
-      { $match: { sessionId, createdAt: { $gte: since } } },
-      {
-        $group: {
-          _id: { $hour: '$createdAt' },
-          sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
-          received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
+    const raw = await mongoRepo
+      .aggregate<{ _id: number; sent: number; received: number }>([
+        { $match: { sessionId, createdAt: { $gte: since } } },
+        {
+          $group: {
+            _id: { $hour: '$createdAt' },
+            sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
+            received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
+          },
         },
-      },
-    ]).toArray();
+      ])
+      .toArray();
 
     const hourMap = new Map(raw.map(r => [r._id, r]));
     const result: Array<{ hour: number; sent: number; received: number }> = [];
@@ -411,7 +431,9 @@ export class StatsService {
     return result;
   }
 
-  private async getHourlyActivitySql(sessionId: string): Promise<Array<{ hour: number; sent: number; received: number }>> {
+  private async getHourlyActivitySql(
+    sessionId: string,
+  ): Promise<Array<{ hour: number; sent: number; received: number }>> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const raw = await this.messageRepo

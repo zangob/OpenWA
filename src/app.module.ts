@@ -100,7 +100,8 @@ if (process.env.QUEUE_ENABLED === 'true') {
         }
 
         if (dbType === 'mongodb') {
-          const mongoUrl = configService.get<string>('dataDatabase.url') ||
+          const mongoUrl =
+            configService.get<string>('dataDatabase.url') ||
             `mongodb://${configService.get<string>('dataDatabase.username')}:${configService.get<string>('dataDatabase.password')}@${configService.get<string>('dataDatabase.host')}:${configService.get<number>('dataDatabase.port', 27017)}/${configService.get<string>('dataDatabase.name', 'openwa')}?authSource=admin`;
 
           return {

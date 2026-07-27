@@ -42,7 +42,16 @@ export class ChatService {
    * Get all chats from database for a session
    */
   async getChats(sessionId: string, options: ChatQueryOptions = {}): Promise<Chat[]> {
-    const { isGroup, archived, pinned, search, sortBy = 'timestamp', order = 'DESC', limit = 1000, offset = 0 } = options;
+    const {
+      isGroup,
+      archived,
+      pinned,
+      search,
+      sortBy = 'timestamp',
+      order = 'DESC',
+      limit = 1000,
+      offset = 0,
+    } = options;
 
     // Build where conditions
     const whereConditions: Record<string, unknown> = { sessionId };
@@ -65,9 +74,7 @@ export class ChatService {
     if (search) {
       const searchLower = search.toLowerCase();
       chats = chats.filter(
-        (c) =>
-          (c.name && c.name.toLowerCase().includes(searchLower)) ||
-          c.chatId.toLowerCase().includes(searchLower),
+        c => (c.name && c.name.toLowerCase().includes(searchLower)) || c.chatId.toLowerCase().includes(searchLower),
       );
     }
 
@@ -247,7 +254,9 @@ export class ChatService {
         stats.totalMessages += messages.length;
       }
     } catch (err) {
-      this.logger.error(`Failed to save checkpoint for chat ${waChat.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to save checkpoint for chat ${waChat.id}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
       throw err;
     }
   }
@@ -256,11 +265,14 @@ export class ChatService {
    * Sync chats from WhatsApp to database with full message history
    * Uses checkpoint pattern - saves each chat immediately so data is not lost on interruption
    */
-  async syncChats(sessionId: string, options?: {
-    delayBetweenChatsMs?: number;
-    delayBetweenMessagesMs?: number;
-    maxMessagesPerChat?: number;
-  }): Promise<{ synced: number; new: number; updated: number; totalMessages: number; aborted?: boolean }> {
+  async syncChats(
+    sessionId: string,
+    options?: {
+      delayBetweenChatsMs?: number;
+      delayBetweenMessagesMs?: number;
+      maxMessagesPerChat?: number;
+    },
+  ): Promise<{ synced: number; new: number; updated: number; totalMessages: number; aborted?: boolean }> {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');
@@ -268,7 +280,9 @@ export class ChatService {
 
     // Check if sync already running for this session
     if (activeSyncOperations.has(sessionId)) {
-      throw new BadRequestException('Sync already in progress for this session. Cancel it first or wait for completion.');
+      throw new BadRequestException(
+        'Sync already in progress for this session. Cancel it first or wait for completion.',
+      );
     }
 
     const abortController = new AbortController();
@@ -300,7 +314,9 @@ export class ChatService {
 
       const existingMap = new Map(existingChats.map(c => [c.chatId, c]));
 
-      this.logger.log(`Processing ${whatsappChats.length} chats with ${delayBetweenChatsMs}ms delay between each, fetching up to ${maxMessagesPerChat} messages per chat`);
+      this.logger.log(
+        `Processing ${whatsappChats.length} chats with ${delayBetweenChatsMs}ms delay between each, fetching up to ${maxMessagesPerChat} messages per chat`,
+      );
 
       for (let i = 0; i < whatsappChats.length; i++) {
         // Check if aborted
@@ -323,7 +339,7 @@ export class ChatService {
         let fetchSucceeded = true;
         try {
           this.logger.log(`Fetching messages for chat ${waChat.id} (${i + 1}/${whatsappChats.length})...`);
-          chatMessages = await engine.getChatHistory(waChat.id, maxMessagesPerChat) as any[];
+          chatMessages = (await engine.getChatHistory(waChat.id, maxMessagesPerChat)) as any[];
           this.logger.log(`Fetched ${chatMessages.length} messages for chat ${waChat.id}`);
 
           // Small delay after fetching messages
@@ -332,16 +348,22 @@ export class ChatService {
           }
         } catch (msgErr) {
           fetchSucceeded = false;
-          this.logger.warn(`Failed to fetch messages for chat ${waChat.id}: ${msgErr instanceof Error ? msgErr.message : 'Unknown error'}`);
+          this.logger.warn(
+            `Failed to fetch messages for chat ${waChat.id}: ${msgErr instanceof Error ? msgErr.message : 'Unknown error'}`,
+          );
         }
 
         // Save immediately as checkpoint - data is persisted NOW, not at the end
         try {
           await this.saveChatCheckpoint(sessionId, waChat, chatMessages, existing, stats, fetchSucceeded);
           stats.synced++;
-          this.logger.log(`Checkpoint saved: Chat ${i + 1}/${whatsappChats.length} - ${waChat.name || waChat.id} with ${chatMessages.length} messages`);
+          this.logger.log(
+            `Checkpoint saved: Chat ${i + 1}/${whatsappChats.length} - ${waChat.name || waChat.id} with ${chatMessages.length} messages`,
+          );
         } catch (saveErr) {
-          this.logger.error(`Failed to save checkpoint for chat ${waChat.id}: ${saveErr instanceof Error ? saveErr.message : 'Unknown error'}`);
+          this.logger.error(
+            `Failed to save checkpoint for chat ${waChat.id}: ${saveErr instanceof Error ? saveErr.message : 'Unknown error'}`,
+          );
           // Continue to next chat even if one fails
         }
       }
@@ -359,7 +381,9 @@ export class ChatService {
       };
     } catch (error) {
       this.logger.error(`Failed to sync chats for session ${sessionId}`, error);
-      throw new BadRequestException(`Failed to sync chats: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new BadRequestException(
+        `Failed to sync chats: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     } finally {
       // Clean up
       activeSyncOperations.delete(sessionId);
@@ -404,9 +428,11 @@ export class ChatService {
       // Fetch messages for this chat
       let chatMessages: any[] = [];
       try {
-        chatMessages = await engine.getChatHistory(chatId, 10000) as any[];
+        chatMessages = (await engine.getChatHistory(chatId, 10000)) as any[];
       } catch (msgErr) {
-        this.logger.warn(`Failed to fetch messages for single chat sync ${chatId}: ${msgErr instanceof Error ? msgErr.message : 'Unknown error'}`);
+        this.logger.warn(
+          `Failed to fetch messages for single chat sync ${chatId}: ${msgErr instanceof Error ? msgErr.message : 'Unknown error'}`,
+        );
       }
 
       const existing = await this.getChatById(sessionId, chatId);
@@ -445,9 +471,9 @@ export class ChatService {
       where: { sessionId },
     });
 
-    const groups = allChats.filter((c) => c.isGroup).length;
-    const archived = allChats.filter((c) => c.archived).length;
-    const pinned = allChats.filter((c) => c.pinned).length;
+    const groups = allChats.filter(c => c.isGroup).length;
+    const archived = allChats.filter(c => c.archived).length;
+    const pinned = allChats.filter(c => c.pinned).length;
     const unreadTotal = allChats.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
     const lastSyncedChat = await this.chatRepository.findOne({
@@ -474,9 +500,7 @@ export class ChatService {
     const searchLower = searchQuery.toLowerCase();
     return allChats
       .filter(
-        (c) =>
-          (c.name && c.name.toLowerCase().includes(searchLower)) ||
-          c.chatId.toLowerCase().includes(searchLower),
+        c => (c.name && c.name.toLowerCase().includes(searchLower)) || c.chatId.toLowerCase().includes(searchLower),
       )
       .slice(0, limit);
   }

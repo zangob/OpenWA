@@ -220,7 +220,7 @@ export class MessageService {
     }
 
     const [messages, total] = await this.messageRepository.findAndCount({
-      where: where as any,
+      where: where,
       order: { createdAt: 'DESC' } as any,
       skip: offset,
       take: limit,

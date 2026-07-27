@@ -1,4 +1,15 @@
-import { Controller, Get, Put, Post, Body, UseInterceptors, UploadedFile, BadRequestException, Res, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Body,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Res,
+  Param,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -769,7 +780,15 @@ export class InfraController {
   })
   @ApiResponse({ status: 201, description: 'File stored, returns path and URL' })
   async uploadMedia(
-    @UploadedFile() file: { fieldname: string; originalname: string; encoding: string; mimetype: string; buffer: Buffer; size: number },
+    @UploadedFile()
+    file: {
+      fieldname: string;
+      originalname: string;
+      encoding: string;
+      mimetype: string;
+      buffer: Buffer;
+      size: number;
+    },
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -805,9 +824,15 @@ export class InfraController {
       const data = await this.storageService.getFile(filePath);
       const ext = path.extname(safeName).toLowerCase();
       const mimeMap: Record<string, string> = {
-        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-        '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.pdf': 'application/pdf',
+        '.mp4': 'video/mp4',
+        '.mp3': 'audio/mpeg',
       };
       res.set('Content-Type', mimeMap[ext] || 'application/octet-stream');
       res.set('Cache-Control', 'public, max-age=86400');

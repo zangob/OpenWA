@@ -21,7 +21,12 @@ export class ContactController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiQuery({ name: 'isMyContact', required: false, type: Boolean, description: 'Filter by my contacts only' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name or number' })
-  @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'number', 'recent', 'lastSeen'], description: 'Sort field' })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['name', 'number', 'recent', 'lastSeen'],
+    description: 'Sort field',
+  })
   @ApiQuery({ name: 'order', required: false, enum: ['ASC', 'DESC'], description: 'Sort order' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Limit results (default: 1000)' })
   @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Offset for pagination' })
@@ -92,7 +97,8 @@ export class ContactController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Sync contacts from WhatsApp to database',
-    description: 'Fetches all contacts from WhatsApp and stores them in the database with sessionId to avoid conflicts between sessions',
+    description:
+      'Fetches all contacts from WhatsApp and stores them in the database with sessionId to avoid conflicts between sessions',
   })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'Sync result with counts' })
@@ -173,10 +179,7 @@ export class ContactController {
   @ApiParam({ name: 'contactId', description: 'Contact ID (e.g., 628xxx@c.us)' })
   @ApiResponse({ status: 200, description: 'Contact details from WhatsApp' })
   @ApiResponse({ status: 404, description: 'Contact not found' })
-  async getLiveContact(
-    @Param('sessionId') sessionId: string,
-    @Param('contactId') contactId: string,
-  ) {
+  async getLiveContact(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');
@@ -205,9 +208,7 @@ export class ContactController {
     return {
       success: !!contact,
       contact,
-      message: contact
-        ? `Contact ${contactId} synced successfully`
-        : `Failed to sync contact ${contactId}`,
+      message: contact ? `Contact ${contactId} synced successfully` : `Failed to sync contact ${contactId}`,
     };
   }
 
@@ -223,10 +224,7 @@ export class ContactController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'number', description: 'Phone number to check (e.g., 628123456789)' })
   @ApiResponse({ status: 200, description: 'Number existence check result' })
-  async checkNumber(
-    @Param('sessionId') sessionId: string,
-    @Param('number') number: string,
-  ) {
+  async checkNumber(@Param('sessionId') sessionId: string, @Param('number') number: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');
@@ -244,10 +242,7 @@ export class ContactController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'contactId', description: 'Contact ID (e.g., 628xxx@c.us)' })
   @ApiResponse({ status: 200, description: 'Profile picture URL' })
-  async getProfilePicture(
-    @Param('sessionId') sessionId: string,
-    @Param('contactId') contactId: string,
-  ) {
+  async getProfilePicture(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');
@@ -266,10 +261,7 @@ export class ContactController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'contactId', description: 'Contact ID (e.g., 628xxx@c.us)' })
   @ApiResponse({ status: 200, description: 'Contact blocked' })
-  async blockContact(
-    @Param('sessionId') sessionId: string,
-    @Param('contactId') contactId: string,
-  ) {
+  async blockContact(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');
@@ -288,10 +280,7 @@ export class ContactController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'contactId', description: 'Contact ID (e.g., 628xxx@c.us)' })
   @ApiResponse({ status: 200, description: 'Contact unblocked' })
-  async unblockContact(
-    @Param('sessionId') sessionId: string,
-    @Param('contactId') contactId: string,
-  ) {
+  async unblockContact(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {
       throw new BadRequestException('Session is not started or not ready');

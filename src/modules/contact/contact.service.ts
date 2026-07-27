@@ -46,15 +46,16 @@ export class ContactService {
       whereClause.isMyContact = isMyContact;
     }
 
-    let contacts = await this.contactRepository.find({ where: whereClause as any });
+    let contacts = await this.contactRepository.find({ where: whereClause });
 
     // In-memory search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      contacts = contacts.filter(c =>
-        (c.name && c.name.toLowerCase().includes(q)) ||
-        (c.number && c.number.toLowerCase().includes(q)) ||
-        (c.pushName && c.pushName.toLowerCase().includes(q)),
+      contacts = contacts.filter(
+        c =>
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.number && c.number.toLowerCase().includes(q)) ||
+          (c.pushName && c.pushName.toLowerCase().includes(q)),
       );
     }
 
@@ -198,7 +199,9 @@ export class ContactService {
       };
     } catch (error) {
       this.logger.error(`Failed to sync contacts for session ${sessionId}`, error);
-      throw new BadRequestException(`Failed to sync contacts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new BadRequestException(
+        `Failed to sync contacts: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -311,10 +314,11 @@ export class ContactService {
     // Fetch all contacts and filter in-memory for MongoDB compatibility
     const allContacts = await this.contactRepository.find();
     const q = searchQuery.toLowerCase();
-    const filtered = allContacts.filter(c =>
-      (c.name && c.name.toLowerCase().includes(q)) ||
-      (c.number && c.number.toLowerCase().includes(q)) ||
-      (c.pushName && c.pushName.toLowerCase().includes(q)),
+    const filtered = allContacts.filter(
+      c =>
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.number && c.number.toLowerCase().includes(q)) ||
+        (c.pushName && c.pushName.toLowerCase().includes(q)),
     );
     filtered.sort((a, b) => {
       const aName = (a.name || a.pushName || '').toLowerCase();

@@ -23,9 +23,24 @@ export class ChatController {
   @Post('sync/whatsapp')
   @ApiOperation({ summary: 'Fetch all chats from WhatsApp and store full message history' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiQuery({ name: 'delayBetweenChatsMs', required: false, type: Number, description: 'Delay between processing each chat in ms (default: 2000)' })
-  @ApiQuery({ name: 'delayBetweenMessagesMs', required: false, type: Number, description: 'Delay after fetching messages per chat in ms (default: 500)' })
-  @ApiQuery({ name: 'maxMessagesPerChat', required: false, type: Number, description: 'Max messages to fetch per chat (default: 10000)' })
+  @ApiQuery({
+    name: 'delayBetweenChatsMs',
+    required: false,
+    type: Number,
+    description: 'Delay between processing each chat in ms (default: 2000)',
+  })
+  @ApiQuery({
+    name: 'delayBetweenMessagesMs',
+    required: false,
+    type: Number,
+    description: 'Delay after fetching messages per chat in ms (default: 500)',
+  })
+  @ApiQuery({
+    name: 'maxMessagesPerChat',
+    required: false,
+    type: Number,
+    description: 'Max messages to fetch per chat (default: 10000)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Chats synced successfully with full message history',
@@ -96,10 +111,7 @@ export class ChatController {
   })
   @ApiResponse({ status: 400, description: 'Session not ready' })
   @ApiResponse({ status: 404, description: 'Chat not found' })
-  async syncSingleChat(
-    @Param('sessionId') sessionId: string,
-    @Body() body: { chatId: string },
-  ): Promise<Chat | null> {
+  async syncSingleChat(@Param('sessionId') sessionId: string, @Body() body: { chatId: string }): Promise<Chat | null> {
     return this.chatService.syncSingleChat(sessionId, body.chatId);
   }
 
@@ -144,7 +156,12 @@ export class ChatController {
   @ApiQuery({ name: 'archived', required: false, type: Boolean, description: 'Filter by archived status' })
   @ApiQuery({ name: 'pinned', required: false, type: Boolean, description: 'Filter by pinned status' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name or chat ID' })
-  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Sort by: name, timestamp, unread, lastSynced' })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    description: 'Sort by: name, timestamp, unread, lastSynced',
+  })
   @ApiQuery({ name: 'order', required: false, type: String, description: 'Sort order: ASC or DESC' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 1000)' })
   @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Results offset' })
@@ -182,7 +199,12 @@ export class ChatController {
   @ApiOperation({ summary: 'Get message history from a specific chat' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'chatId', description: 'Chat ID (e.g., 1234567890@c.us for contacts, 1234567890@g.us for groups)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max messages to fetch (default 50, max 100)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max messages to fetch (default 50, max 100)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Chat message history from WhatsApp',

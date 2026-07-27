@@ -19,7 +19,8 @@ interface ParsedMedia {
 }
 
 /** Default local storage path used by StorageService. */
-const LOCAL_MEDIA_PATH = process.env.STORAGE_PATH || './data/media';
+const LOCAL_MEDIA_PATH = process.env.STORAGE_LOCAL_PATH || process.env.STORAGE_PATH || './data/media';
+const APP_BASE_URL = process.env.APP_URL || '';
 
 /**
  * Resolve the media payload for an image template into the `{ data, mimetype }`
@@ -43,9 +44,11 @@ function resolveImage(image: NonNullable<CampaignTemplate['image']>): ParsedMedi
       const buf = fs.readFileSync(fullPath);
       return { data: buf.toString('base64'), mimetype: image.mimetype || 'image/jpeg' };
     }
-    // Fall through — if file doesn't exist, return the URL as-is and let the
-    // engine try (it will likely fail, but the error will be clear).
-    return { data: url, mimetype: image.mimetype || 'image/jpeg' };
+    // File not found locally — try as an absolute URL.
+    if (url.startsWith('/') && APP_BASE_URL) {
+      return { data: `${APP_BASE_URL}${url}`, mimetype: image.mimetype || 'image/jpeg' };
+    }
+    throw new Error(`Image file not found at ${fullPath} and no APP_URL configured`);
   }
 
   const raw = (image.base64 || '').trim();

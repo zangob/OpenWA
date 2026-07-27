@@ -52,9 +52,4 @@ const mongoDataSource = new DataSource({
 });
 
 // Export the appropriate data source based on DATABASE_TYPE
-export default dbType === 'mongodb'
-  ? mongoDataSource
-  : dbType === 'postgres'
-    ? postgresDataSource
-    : sqliteDataSource;
-
+export default dbType === 'mongodb' ? mongoDataSource : dbType === 'postgres' ? postgresDataSource : sqliteDataSource;

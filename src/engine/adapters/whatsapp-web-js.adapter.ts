@@ -117,7 +117,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       try {
         this.qrCode = await qrcode.toDataURL(qr);
         this.setStatus(EngineStatus.QR_READY);
-        this.callbacks.onQRCode?.(this.qrCode!);
+        this.callbacks.onQRCode?.(this.qrCode);
       } catch (error) {
         this.logger.error('Error generating QR code', String(error));
       }
@@ -470,7 +470,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         let quotedMessage: ChatMessage['quotedMessage'] = undefined;
         if (msg.hasQuotedMsg) {
           try {
-            const quoted = await (msg as unknown as { getQuotedMessage(): Promise<{ id: { _serialized: string }; body?: string }> }).getQuotedMessage();
+            const quoted = await (
+              msg as unknown as { getQuotedMessage(): Promise<{ id: { _serialized: string }; body?: string }> }
+            ).getQuotedMessage();
             if (quoted) {
               quotedMessage = {
                 id: String(quoted.id?._serialized || quoted.id),
