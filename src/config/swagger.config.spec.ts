@@ -100,6 +100,7 @@ describe('exemptPublicOperations', () => {
 describe('PUBLIC_PATHS drift guard', () => {
   const EXPECTED_PUBLIC_CONTROLLERS = [
     'src/modules/health/health.controller.ts',
+    'src/modules/infra/infra-media.controller.ts',
     'src/modules/infra/infra-status.controller.ts',
     'src/modules/integration/ingress.controller.ts',
     'src/modules/metrics/metrics.controller.ts',
@@ -140,6 +141,8 @@ describe('PUBLIC_PATHS drift guard', () => {
         '/api/health/live',
         '/api/health/ready',
         '/api/infra/health',
+        '/api/infra/media/upload',
+        '/api/infra/media/{filename}',
         '/api/ingress/{pluginId}/{instanceId}/{path}',
       ].sort(),
     );

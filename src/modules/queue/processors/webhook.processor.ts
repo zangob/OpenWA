@@ -135,12 +135,9 @@ export class WebhookProcessor extends WorkerHost {
     // retry (a duplicate POST for an already-delivered event) and, on the final attempt, file a
     // false dead-letter row. Log a bookkeeping failure and keep the success outcome.
     try {
-      await this.webhookRepository.update(
-        { id: webhookId },
-        {
-          lastTriggeredAt: new Date(),
-        },
-      );
+      await this.webhookRepository.update(webhookId, {
+        lastTriggeredAt: new Date(),
+      });
     } catch (bookkeepingError) {
       this.logger.error(
         'Webhook delivered but lastTriggeredAt update failed',

@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
  * Each message is a separate document with chatId reference
  * @unique - sessionId + chatId + messageId combination must be unique
  */
-@Entity('messages')
+@Entity('chat_messages')
 @Unique(['sessionId', 'chatId', 'messageId'])
 @Index(['sessionId'])
 @Index(['sessionId', 'chatId'])

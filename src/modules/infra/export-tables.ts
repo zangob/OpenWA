@@ -242,5 +242,9 @@ export const EXPORT_TABLES: AnyExportTable[] = [
  * entity metadata does not report it.
  */
 export const EXPORT_TABLE_EXCLUSIONS: Readonly<Record<string, string>> = {
-  // (empty today: every data-connection entity table is exported)
+  // Per-session mirrors of WhatsApp data, rebuilt from the account on demand via the dashboard's
+  // "sync" actions — not authoritative state, so excluded from the backup payload.
+  contacts: 'WhatsApp contact mirror, re-synced from the account (modules/contact)',
+  chats: 'WhatsApp chat mirror, re-synced from the account (modules/chat)',
+  chat_messages: 'WhatsApp chat-history mirror, re-synced from the account (modules/chat)',
 };

@@ -716,12 +716,9 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
       // already-delivered webhook (duplicate POST) and, on the last attempt, file a false dead-letter
       // row. Log it and keep the success outcome.
       try {
-        await this.webhookRepository.update(
-          { id: webhook.id },
-          {
-            lastTriggeredAt: new Date(),
-          },
-        );
+        await this.webhookRepository.update(webhook.id, {
+          lastTriggeredAt: new Date(),
+        });
       } catch (bookkeepingError) {
         this.logger.error(
           `Webhook delivered to ${webhook.id} but lastTriggeredAt update failed`,

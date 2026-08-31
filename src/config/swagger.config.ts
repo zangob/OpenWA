@@ -22,6 +22,8 @@ export const PUBLIC_PATHS = [
   '/api/health/live',
   '/api/health/ready',
   '/api/infra/health',
+  '/api/infra/media/upload',
+  '/api/infra/media/{filename}',
   '/api/ingress/{pluginId}/{instanceId}/{path}',
 ];
 

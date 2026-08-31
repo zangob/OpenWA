@@ -14,6 +14,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ToStrictBoolean, ToStrictNumber } from '../../../common/utils/strict-boolean';
 
 // ── Message template ──────────────────────────────────────────────────────
 
@@ -123,6 +124,7 @@ export class SendCampaignTestDto {
 
 export class StartCampaignDto {
   @ApiProperty({ description: 'Delay between messages in seconds (min 30, max 300)', minimum: 30, maximum: 300 })
+  @ToStrictNumber()
   @IsNumber()
   @Min(30)
   @Max(300)
@@ -130,6 +132,7 @@ export class StartCampaignDto {
 
   @ApiPropertyOptional({ description: 'Add a small random jitter to each delay', default: true })
   @IsOptional()
+  @ToStrictBoolean()
   @IsBoolean()
   randomizeDelay?: boolean;
 }

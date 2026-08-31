@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, IsBoolean, IsEnum, Min, Max } from 'class-validator';
+import { ToStrictBoolean, ToStrictNumber } from '../../../common/utils/strict-boolean';
 
 export enum PhoneColumnType {
   PHONE = 'phone',
@@ -39,6 +40,7 @@ export class BulkUploadOptionsDto {
     default: 1,
   })
   @IsOptional()
+  @ToStrictNumber()
   @IsNumber()
   @Min(0)
   skipRows?: number;
@@ -56,6 +58,7 @@ export class BulkUploadOptionsDto {
     default: 3000,
   })
   @IsOptional()
+  @ToStrictNumber()
   @IsNumber()
   @Min(1000)
   @Max(60000)
@@ -66,6 +69,7 @@ export class BulkUploadOptionsDto {
     default: true,
   })
   @IsOptional()
+  @ToStrictBoolean()
   @IsBoolean()
   randomizeDelay?: boolean;
 
@@ -74,6 +78,7 @@ export class BulkUploadOptionsDto {
     default: false,
   })
   @IsOptional()
+  @ToStrictBoolean()
   @IsBoolean()
   stopOnError?: boolean;
 
@@ -82,6 +87,7 @@ export class BulkUploadOptionsDto {
     default: 0,
   })
   @IsOptional()
+  @ToStrictNumber()
   @IsNumber()
   @Min(0)
   maxNumbers?: number;
