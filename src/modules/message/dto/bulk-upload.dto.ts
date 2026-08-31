@@ -94,14 +94,14 @@ export class BulkUploadMessageDto {
     example: 'text',
   })
   @IsEnum(['text', 'image', 'video', 'audio', 'document'])
-  type: 'text' | 'image' | 'video' | 'audio' | 'document';
+  type!: 'text' | 'image' | 'video' | 'audio' | 'document';
 
   @ApiProperty({
     description: 'Message text content (for text messages or captions)',
     example: 'Hello {name}! This is a bulk message.',
   })
   @IsString()
-  text: string;
+  text!: string;
 
   @ApiPropertyOptional({
     description: 'Media URL (for image/video/audio/document)',
@@ -137,19 +137,19 @@ export class BulkUploadMessageDto {
 
 export class BulkUploadResponseDto {
   @ApiProperty()
-  batchId: string;
+  batchId!: string;
 
   @ApiProperty()
-  status: string;
+  status!: string;
 
   @ApiProperty()
-  totalNumbers: number;
+  totalNumbers!: number;
 
   @ApiProperty()
-  validNumbers: number;
+  validNumbers!: number;
 
   @ApiProperty()
-  invalidNumbers: number;
+  invalidNumbers!: number;
 
   @ApiPropertyOptional()
   invalidNumbersList?: string[];
@@ -158,16 +158,16 @@ export class BulkUploadResponseDto {
   estimatedCompletionTime?: string;
 
   @ApiProperty()
-  statusUrl: string;
+  statusUrl!: string;
 
   @ApiProperty()
-  message: string;
+  message!: string;
 }
 
 export class PhoneNumberValidationResult {
-  original: string;
-  formatted: string | null;
-  valid: boolean;
-  chatId: string | null;
+  original!: string;
+  formatted!: string | null;
+  valid!: boolean;
+  chatId!: string | null;
   error?: string;
 }

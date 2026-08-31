@@ -21,7 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
 @Index(['sessionId', 'name'])
 export class Chat {
   @PrimaryColumn('uuid')
-  id: string;
+  id!: string;
 
   @BeforeInsert()
   generateId() {
@@ -31,50 +31,50 @@ export class Chat {
   }
 
   @Column({ type: 'varchar', length: 100 })
-  sessionId: string;
+  sessionId!: string;
 
   @Column({ type: 'varchar', length: 100 })
-  chatId: string;
+  chatId!: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  name: string | null;
+  name!: string | null;
 
   @Column({ type: 'boolean', default: false })
-  isGroup: boolean;
+  isGroup!: boolean;
 
   @Column({ type: 'boolean', default: false })
-  archived: boolean;
+  archived!: boolean;
 
   @Column({ type: 'boolean', default: false })
-  pinned: boolean;
+  pinned!: boolean;
 
   @Column({ type: 'bigint', nullable: true })
-  timestamp: number | null;
+  timestamp!: number | null;
 
   @Column({ type: 'int', default: 0 })
-  unreadCount: number;
+  unreadCount!: number;
 
   @Column({ type: 'bigint', nullable: true })
-  muteExpiration: number | null;
+  muteExpiration!: number | null;
 
   @Column({ type: 'simple-json', nullable: true })
-  lastMessage: Record<string, unknown> | null;
+  lastMessage!: Record<string, unknown> | null;
 
   @Column({ type: 'simple-json', nullable: true })
-  metadata: Record<string, unknown> | null;
+  metadata!: Record<string, unknown> | null;
 
   @Column({ type: 'bigint', default: 0 })
-  messageCount: number;
+  messageCount!: number;
 
   @Column({ type: 'bigint', default: 0 })
-  syncVersion: number;
+  syncVersion!: number;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @Column({ type: 'datetime', nullable: true })
-  lastSyncedAt: Date | null;
+  lastSyncedAt!: Date | null;
 }

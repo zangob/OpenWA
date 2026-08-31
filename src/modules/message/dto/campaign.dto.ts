@@ -37,7 +37,7 @@ class CampaignImageDto {
 class CampaignMessageDto {
   @ApiProperty({ enum: ['text', 'image'] })
   @IsIn(['text', 'image'])
-  type: 'text' | 'image';
+  type!: 'text' | 'image';
 
   @ApiPropertyOptional({ description: 'Message text / image caption. Supports {name} placeholder.' })
   @IsOptional()
@@ -59,12 +59,12 @@ class CampaignNumberDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
-  name: string;
+  name!: string;
 
   @ApiProperty({ example: '+628123456789' })
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phone!: string;
 }
 
 class CampaignRecipientsDto {
@@ -96,12 +96,12 @@ export class CreateCampaignDto {
   @ApiProperty({ type: CampaignMessageDto })
   @ValidateNested()
   @Type(() => CampaignMessageDto)
-  message: CampaignMessageDto;
+  message!: CampaignMessageDto;
 
   @ApiProperty({ type: CampaignRecipientsDto })
   @ValidateNested()
   @Type(() => CampaignRecipientsDto)
-  recipients: CampaignRecipientsDto;
+  recipients!: CampaignRecipientsDto;
 
   @ApiPropertyOptional({ description: 'Default country code prepended to local numbers, e.g. +62' })
   @IsOptional()
@@ -116,7 +116,7 @@ export class SendCampaignTestDto {
   @ApiProperty({ description: "Operator's own phone number to receive the test message", example: '+628123456789' })
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phone!: string;
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export class StartCampaignDto {
   @IsNumber()
   @Min(30)
   @Max(300)
-  delaySeconds: number;
+  delaySeconds!: number;
 
   @ApiPropertyOptional({ description: 'Add a small random jitter to each delay', default: true })
   @IsOptional()

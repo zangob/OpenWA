@@ -1,330 +1,225 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Contact } from './entities/contact.entity';
-import { SessionService } from '../session/session.service';
+import { HttpException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { EngineRegistry } from '../../engine/engine-registry.service';
 import { createLogger } from '../../common/services/logger.service';
+import { IWhatsAppEngine } from '../../engine/interfaces/whatsapp-engine.interface';
+import { paginate, ListOptions } from '../../common/utils/paginate';
+import { isIndividualWid, parseWaId, toNeutralJid } from '../../engine/identity/wa-id';
 
-export interface ContactQueryOptions {
-  isMyContact?: boolean;
-  searchQuery?: string;
-  sortBy?: 'name' | 'number' | 'recent' | 'lastSeen';
-  order?: 'ASC' | 'DESC';
-  limit?: number;
-  offset?: number;
-}
-
-export interface ContactFromWhatsApp {
-  id: string;
-  name?: string;
-  pushName?: string;
-  number: string;
-  isMyContact: boolean;
-  isBlocked?: boolean;
-  profilePicUrl?: string;
-}
-
+/**
+ * Owns engine access for contact operations so the "session not started" guard and
+ * contact business rules (not-found mapping) live behind the service boundary.
+ */
 @Injectable()
 export class ContactService {
-  private readonly logger = createLogger(ContactService.name);
+  private readonly logger = createLogger('ContactService');
 
-  constructor(
-    @InjectRepository(Contact, 'data')
-    private readonly contactRepository: Repository<Contact>,
-    private readonly sessionService: SessionService,
-  ) {}
+  constructor(private readonly engines: EngineRegistry) {}
 
-  /**
-   * Get contacts from database for a session
-   */
-  async getContacts(sessionId: string, options: ContactQueryOptions = {}): Promise<Contact[]> {
-    const { isMyContact, searchQuery, sortBy = 'name', order = 'ASC', limit = 1000, offset = 0 } = options;
-
-    // Fetch all contacts for the session (compatible with SQLite, Postgres, and MongoDB)
-    const whereClause: Record<string, unknown> = { sessionId };
-    if (isMyContact !== undefined) {
-      whereClause.isMyContact = isMyContact;
-    }
-
-    let contacts = await this.contactRepository.find({ where: whereClause });
-
-    // In-memory search filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      contacts = contacts.filter(
-        c =>
-          (c.name && c.name.toLowerCase().includes(q)) ||
-          (c.number && c.number.toLowerCase().includes(q)) ||
-          (c.pushName && c.pushName.toLowerCase().includes(q)),
-      );
-    }
-
-    // In-memory sort
-    const dir = order === 'DESC' ? -1 : 1;
-    contacts.sort((a, b) => {
-      switch (sortBy) {
-        case 'name': {
-          const aName = (a.name || a.pushName || '').toLowerCase();
-          const bName = (b.name || b.pushName || '').toLowerCase();
-          return aName < bName ? -dir : aName > bName ? dir : 0;
-        }
-        case 'number':
-          return (a.number || '') < (b.number || '') ? -dir : (a.number || '') > (b.number || '') ? dir : 0;
-        case 'recent':
-          return (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0);
-        case 'lastSeen':
-          return (b.lastSyncedAt?.getTime() || 0) - (a.lastSyncedAt?.getTime() || 0);
-        default:
-          return 0;
-      }
-    });
-
-    // Pagination
-    return contacts.slice(offset, offset + limit);
+  private getEngine(sessionId: string): IWhatsAppEngine {
+    // EngineRegistry.require()'s default is this exact 400 "Session is not started".
+    return this.engines.require(sessionId);
   }
 
-  /**
-   * Get a single contact by ID
-   */
-  async getContactById(sessionId: string, contactId: string): Promise<Contact | null> {
-    return this.contactRepository.findOne({
-      where: { sessionId, contactId },
-    });
+  getContacts(sessionId: string, opts: ListOptions = {}) {
+    // getEngine throws synchronously (keeps the "session not started" guard a sync 400); the
+    // engine returns the full set and we bound the HTTP response window via paginate().
+    return this.getEngine(sessionId)
+      .getContacts()
+      .then(contacts => paginate(contacts, opts.limit, opts.offset));
   }
 
-  /**
-   * Get contact by phone number
-   */
-  async getContactByNumber(sessionId: string, number: string): Promise<Contact | null> {
-    return this.contactRepository.findOne({
-      where: { sessionId, number },
-    });
-  }
-
-  /**
-   * Sync contacts from WhatsApp to database
-   */
-  async syncContacts(sessionId: string): Promise<{ synced: number; new: number; updated: number }> {
-    const engine = this.sessionService.getEngine(sessionId);
-    if (!engine) {
-      throw new BadRequestException('Session is not started or not ready');
-    }
-
-    try {
-      // Fetch contacts from WhatsApp
-      this.logger.log(`Fetching contacts from WhatsApp for session ${sessionId}`);
-      const whatsappContacts = await engine.getContacts();
-
-      const existingContacts = await this.contactRepository.find({
-        where: { sessionId },
-      });
-
-      const existingMap = new Map(existingContacts.map(c => [c.contactId, c]));
-
-      let newCount = 0;
-      let updatedCount = 0;
-      const contactsToSave: Contact[] = [];
-
-      for (const waContact of whatsappContacts) {
-        const existing = existingMap.get(waContact.id);
-
-        if (existing) {
-          // Update existing contact
-          let needsUpdate = false;
-
-          if (waContact.name !== existing.name) {
-            existing.name = waContact.name || null;
-            needsUpdate = true;
-          }
-          if (waContact.pushName !== existing.pushName) {
-            existing.pushName = waContact.pushName || null;
-            needsUpdate = true;
-          }
-          if (waContact.isMyContact !== existing.isMyContact) {
-            existing.isMyContact = waContact.isMyContact;
-            needsUpdate = true;
-          }
-          if (waContact.isBlocked !== existing.isBlocked) {
-            existing.isBlocked = waContact.isBlocked || false;
-            needsUpdate = true;
-          }
-          if (waContact.profilePicUrl !== existing.profilePicUrl) {
-            existing.profilePicUrl = waContact.profilePicUrl || null;
-            needsUpdate = true;
-          }
-
-          if (needsUpdate) {
-            existing.syncVersion = (existing.syncVersion || 0) + 1;
-            existing.lastSyncedAt = new Date();
-            contactsToSave.push(existing);
-            updatedCount++;
-          }
-        } else {
-          // Create new contact
-          const newContact = this.contactRepository.create({
-            sessionId,
-            contactId: waContact.id,
-            name: waContact.name || null,
-            pushName: waContact.pushName || null,
-            number: waContact.number,
-            isMyContact: waContact.isMyContact,
-            isBlocked: waContact.isBlocked || false,
-            profilePicUrl: waContact.profilePicUrl || null,
-            syncVersion: 1,
-            lastSyncedAt: new Date(),
-          });
-          contactsToSave.push(newContact);
-          newCount++;
-        }
-      }
-
-      // Batch save all contacts - deduplicate to avoid unique constraint errors
-      if (contactsToSave.length > 0) {
-        // Remove duplicates by contactId (keep last occurrence as it's most recent)
-        const uniqueContacts = new Map<string, Contact>();
-        for (const contact of contactsToSave) {
-          uniqueContacts.set(contact.contactId, contact);
-        }
-        await this.contactRepository.save(Array.from(uniqueContacts.values()));
-      }
-
-      this.logger.log(
-        `Synced ${contactsToSave.length} contacts for session ${sessionId} (${newCount} new, ${updatedCount} updated)`,
-      );
-
-      return {
-        synced: contactsToSave.length,
-        new: newCount,
-        updated: updatedCount,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to sync contacts for session ${sessionId}`, error);
-      throw new BadRequestException(
-        `Failed to sync contacts: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  /**
-   * Sync a single contact from WhatsApp
-   */
-  async syncSingleContact(sessionId: string, contactId: string): Promise<Contact | null> {
-    const engine = this.sessionService.getEngine(sessionId);
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
-
-    try {
-      const waContact = await engine.getContactById(contactId);
-      if (!waContact) {
-        return null;
-      }
-
-      const existing = await this.getContactById(sessionId, contactId);
-
-      if (existing) {
-        // Update existing
-        existing.name = waContact.name || null;
-        existing.pushName = waContact.pushName || null;
-        existing.number = waContact.number;
-        existing.isMyContact = waContact.isMyContact;
-        existing.isBlocked = waContact.isBlocked || false;
-        existing.profilePicUrl = waContact.profilePicUrl || null;
-        existing.syncVersion = (existing.syncVersion || 0) + 1;
-        existing.lastSyncedAt = new Date();
-        return this.contactRepository.save(existing);
-      } else {
-        // Create new
-        const newContact = this.contactRepository.create({
-          sessionId,
-          contactId: waContact.id,
-          name: waContact.name || null,
-          pushName: waContact.pushName || null,
-          number: waContact.number,
-          isMyContact: waContact.isMyContact,
-          isBlocked: waContact.isBlocked || false,
-          profilePicUrl: waContact.profilePicUrl || null,
-          syncVersion: 1,
-          lastSyncedAt: new Date(),
-        });
-        return this.contactRepository.save(newContact);
-      }
-    } catch (error) {
-      this.logger.error(`Failed to sync contact ${contactId} for session ${sessionId}`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Update contact profile picture URL
-   */
-  async updateProfilePicture(sessionId: string, contactId: string, profilePicUrl: string): Promise<Contact | null> {
-    const contact = await this.getContactById(sessionId, contactId);
+  async getContactById(sessionId: string, contactId: string) {
+    const contact = await this.getEngine(sessionId).getContactById(contactId);
     if (!contact) {
+      throw new NotFoundException(`Contact ${contactId} not found`);
+    }
+    return contact;
+  }
+
+  /** The read half of block/unblock — neutral ids only (the honest common subset of both engines). */
+  getBlockedContacts(sessionId: string) {
+    return this.getEngine(sessionId).getBlockedContacts();
+  }
+
+  checkNumberExists(sessionId: string, number: string) {
+    return this.getEngine(sessionId).checkNumberExists(number);
+  }
+
+  getNumberId(sessionId: string, number: string) {
+    return this.getEngine(sessionId).getNumberId(number);
+  }
+
+  /**
+   * The HTTP route promises null when the LOOKUP cannot produce an answer (docs/06 and the
+   * ApiResponse text): a dead page, an evaluation error or a rate limit answers 200 null, not a
+   * 5xx. The ENGINE method rejects on those (the lid resolver needs the distinction), so genuine
+   * lookup failures are swallowed here at the boundary - logged at debug, since the old adapter
+   * catch was the only place these were visible. Deliberate HTTP answers (400 not-started, 409
+   * not-ready) propagate: nulling them would tell a retrying caller "no mapping" for a session
+   * that simply is not running.
+   */
+  async resolveContactPhone(sessionId: string, contactId: string): Promise<string | null> {
+    const engine = this.getEngine(sessionId);
+    try {
+      return await engine.resolveContactPhone(contactId);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.debug(`resolveContactPhone lookup failed for ${contactId}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
+  }
 
-    contact.profilePicUrl = profilePicUrl;
-    return this.contactRepository.save(contact);
+  getProfilePicture(sessionId: string, contactId: string) {
+    return this.getEngine(sessionId).getProfilePicture(contactId);
+  }
+
+  /** Upper bound for one batch call — keeps a huge `ids` list from pinning the engine for minutes. */
+  private static readonly PROFILE_PICTURES_MAX_IDS = 50;
+
+  /** Per-id engine-lookup deadline: one hanging id must not hold the whole batch hostage. */
+  private static readonly PROFILE_PICTURE_LOOKUP_TIMEOUT_MS = 8000;
+
+  /**
+   * Batch-resolve profile picture URLs for a list of contact ids (the dashboard's chat-list avatars
+   * — one HTTP call instead of N, so the per-IP throttle isn't exhausted by a sidebar full of
+   * parallel fetches). Engine lookups run 5 at a time with a per-id deadline; a per-id failure or
+   * timeout yields null for that id (hidden/no picture), never aborts the batch. Ids beyond
+   * PROFILE_PICTURES_MAX_IDS are ignored.
+   */
+  async getProfilePictures(sessionId: string, ids: string[]): Promise<Record<string, string | null>> {
+    const engine = this.getEngine(sessionId);
+    const capped = ids.slice(0, ContactService.PROFILE_PICTURES_MAX_IDS);
+    const pictures: Record<string, string | null> = {};
+    const CHUNK = 5;
+    for (let i = 0; i < capped.length; i += CHUNK) {
+      const chunk = capped.slice(i, i + CHUNK);
+      const results = await Promise.all(
+        chunk.map((id): Promise<readonly [string, string | null]> => {
+          // Per-id deadline: a hanging lookup (bad/unreachable id) resolves null instead of
+          // stalling the whole batch; the timer is cleared the moment the engine settles.
+          return new Promise<readonly [string, string | null]>(resolve => {
+            const timer = setTimeout(
+              () => resolve([id, null] as const),
+              ContactService.PROFILE_PICTURE_LOOKUP_TIMEOUT_MS,
+            );
+            engine.getProfilePicture(id).then(
+              url => {
+                clearTimeout(timer);
+                resolve([id, url] as const);
+              },
+              () => {
+                clearTimeout(timer);
+                resolve([id, null] as const);
+              },
+            );
+          });
+        }),
+      );
+      for (const [id, url] of results) {
+        pictures[id] = url;
+      }
+    }
+    return pictures;
   }
 
   /**
-   * Delete all contacts for a session (cleanup)
+   * Guarded because whatsapp-web.js's Contact.block()/unblock() silently return false for a group id
+   * (nothing blocked, reported as success), and Baileys passes the id to updateBlockStatus, whose
+   * Boom for an unresolvable jid has no HttpException mapping (opaque 500). See `assertBlockable`
+   * for why this guard is wider than the addressbook one.
    */
-  async deleteContactsBySession(sessionId: string): Promise<number> {
-    const result = await this.contactRepository.delete({ sessionId });
-    return result.affected || 0;
+  blockContact(sessionId: string, contactId: string) {
+    this.assertBlockable(contactId);
+    return this.getEngine(sessionId).blockContact(this.toAddressableId(contactId));
   }
 
   /**
-   * Get contact statistics for a session
+   * Blocking acts on an IDENTITY, not on an addressbook row, so unlike the addressbook writes it
+   * accepts a privacy id (`@lid`) as well as a phone-based one. It has to: a privacy-id contact has
+   * no phone number, and the blocklist READ answers ids verbatim (Baileys maps each blocked jid
+   * through `toNeutralJid`, which leaves an unresolved lid as `<lid>@lid`; whatsapp-web.js returns
+   * the wid as-is), so refusing them made the very ids this API hands out unusable for the matching
+   * write and left such a contact listed as blocked with no way to unblock it.
+   *
+   * Neither engine needs a phone here: Baileys passes the jid straight to `updateBlockStatus`, and
+   * whatsapp-web.js only short-circuits (`Contact.block()` returns false without acting) for a
+   * group. What must still be refused is an id that names no individual at all, which is what made
+   * whatsapp-web.js answer 200 "blocked" while nothing was blocked.
    */
-  async getContactStats(sessionId: string): Promise<{
-    total: number;
-    myContacts: number;
-    blocked: number;
-    withProfilePic: number;
-    lastSynced: Date | null;
-  }> {
-    const [total, myContacts, blocked, withProfilePic] = await Promise.all([
-      this.contactRepository.count({ where: { sessionId } }),
-      this.contactRepository.count({ where: { sessionId, isMyContact: true } }),
-      this.contactRepository.count({ where: { sessionId, isBlocked: true } }),
-      this.contactRepository.count({ where: { sessionId, profilePicUrl: undefined } }),
-    ]);
-
-    const lastSyncedContact = await this.contactRepository.findOne({
-      where: { sessionId },
-      order: { lastSyncedAt: 'DESC' },
-    });
-
-    return {
-      total,
-      myContacts,
-      blocked,
-      withProfilePic,
-      lastSynced: lastSyncedContact?.lastSyncedAt || null,
-    };
-  }
-
-  /**
-   * Search contacts across all sessions (admin only)
-   */
-  async searchAllContacts(searchQuery: string, limit = 100): Promise<Contact[]> {
-    // Fetch all contacts and filter in-memory for MongoDB compatibility
-    const allContacts = await this.contactRepository.find();
-    const q = searchQuery.toLowerCase();
-    const filtered = allContacts.filter(
-      c =>
-        (c.name && c.name.toLowerCase().includes(q)) ||
-        (c.number && c.number.toLowerCase().includes(q)) ||
-        (c.pushName && c.pushName.toLowerCase().includes(q)),
+  private assertBlockable(contactId: string): void {
+    if (isIndividualWid(contactId) || this.isBareNumber(contactId)) return;
+    throw new BadRequestException(
+      `Contact ${contactId} does not name an individual; block and unblock act on a person, so pass a phone-based or privacy (@lid) contact id instead`,
     );
-    filtered.sort((a, b) => {
-      const aName = (a.name || a.pushName || '').toLowerCase();
-      const bName = (b.name || b.pushName || '').toLowerCase();
-      return aName < bName ? -1 : aName > bName ? 1 : 0;
-    });
-    return filtered.slice(0, limit);
+  }
+
+  /**
+   * An addressbook entry is keyed by a PHONE NUMBER, so a privacy-id (`@lid`) contact cannot be
+   * saved or removed: the lid's digits are not a phone number, and whatsapp-web.js — which takes a
+   * bare number rather than a JID — would happily store them as one, silently creating an
+   * addressbook entry for a number that does not exist.
+   *
+   * Refused rather than forward-resolved through the lid mapping: the mapping is best-effort, and a
+   * write that lands under the wrong number is worse than one the caller is told to redo with a
+   * phone-based id.
+   */
+  private assertAddressable(contactId: string): void {
+    const kind = parseWaId(contactId).kind;
+    // Allow-list rather than deny-list: only a user id (or a bare number, which parses as
+    // `unknown`) names a phone. A group/newsletter/broadcast/status id also carries digits that
+    // whatsapp-web.js would happily store as a phone number for a contact that does not exist.
+    // The DOMAIN alone is not enough: `parseWaId('NOT A USER@c.us').kind` is 'user', so free text
+    // cleared this guard and reached the engine, which reported a successful save for an entry
+    // keyed by something that is not a phone number. isIndividualWid additionally requires the
+    // user-part to be numeric — the same predicate the group-participant, channel-admin and
+    // message-mention surfaces already apply to these very shapes.
+    if ((kind === 'user' && isIndividualWid(contactId)) || this.isBareNumber(contactId)) return;
+    if (kind === 'lid') {
+      throw new BadRequestException(
+        `Contact ${contactId} is a privacy id (@lid) with no known phone number; the addressbook is keyed by phone number, so pass a phone-based contact id instead`,
+      );
+    }
+    throw new BadRequestException(
+      `Contact ${contactId} does not name a person; the addressbook is keyed by phone number, so pass a phone-based contact id instead`,
+    );
+  }
+
+  /** A digits-only id, e.g. `628123456789` — accepted for convenience and qualified below. */
+  private isBareNumber(contactId: string): boolean {
+    return parseWaId(contactId).kind === 'unknown' && /^\d{5,}$/.test(contactId.trim());
+  }
+
+  /**
+   * Qualify a bare number to the neutral `@c.us` dialect before it reaches an engine.
+   *
+   * Baileys keys the addressbook app-state patch by the id it is handed and only folds a recognised
+   * user JID to the engine dialect, so an unqualified number would be written under a key WhatsApp
+   * never reads — reported as success. whatsapp-web.js takes the user-part either way, so the
+   * qualification is a no-op there.
+   */
+  private toAddressableId(contactId: string): string {
+    const trimmed = contactId.trim();
+    // Neutralized rather than passed through: a Meta-hosted id names the same account as its plain
+    // twin but whatsapp-web.js knows no such domain, so forwarding the suffix verbatim would fail
+    // inside the page instead of acting on the person. toNeutralJid is idempotent on ids already in
+    // the neutral dialect, and the Baileys adapter re-encodes to its own dialect on the way out.
+    return this.isBareNumber(trimmed) ? `${trimmed}@c.us` : toNeutralJid(trimmed);
+  }
+
+  upsertContact(sessionId: string, contactId: string, firstName: string, lastName?: string) {
+    this.assertAddressable(contactId);
+    return this.getEngine(sessionId).upsertContact(this.toAddressableId(contactId), firstName, lastName);
+  }
+
+  deleteContact(sessionId: string, contactId: string) {
+    this.assertAddressable(contactId);
+    return this.getEngine(sessionId).deleteContact(this.toAddressableId(contactId));
+  }
+
+  unblockContact(sessionId: string, contactId: string) {
+    this.assertBlockable(contactId);
+    return this.getEngine(sessionId).unblockContact(this.toAddressableId(contactId));
   }
 }

@@ -1,9 +1,46 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MongoRepository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
 import { Session, SessionStatus } from '../session/entities/session.entity';
 import { Message, MessageStatus } from '../message/entities/message.entity';
 import { CacheService } from '../../common/cache';
+
+/**
+ * SQL for the time-series timestamp bucket, per DB dialect. SQLite has strftime(); Postgres has
+ * neither strftime nor a case-insensitive bare `m.createdAt` (unquoted it folds to lowercase and
+ * misses the quoted "createdAt" column) — so it needs to_char() with a quoted column. The hour
+ * format yields an identical zero-padded, chronologically-sortable label on both engines, so the
+ * GROUP BY/ORDER BY on the alias and the downstream map() are unchanged.
+ */
+export function timeSeriesTimestampSql(dbType: string, interval: 'hour' | 'day'): string {
+  if (dbType === 'postgres') {
+    const fmt = interval === 'hour' ? 'YYYY-MM-DD HH24:00:00' : 'YYYY-MM-DD';
+    return `to_char(m."createdAt", '${fmt}')`;
+  }
+  const fmt = interval === 'hour' ? '%Y-%m-%d %H:00:00' : '%Y-%m-%d';
+  return `strftime('${fmt}', m.createdAt)`;
+}
+
+/** SQL for the integer hour-of-day (0-23) bucket, per DB dialect. */
+export function hourBucketSql(dbType: string): string {
+  return dbType === 'postgres'
+    ? `CAST(EXTRACT(HOUR FROM m."createdAt") AS INTEGER)`
+    : `CAST(strftime('%H', m.createdAt) AS INTEGER)`;
+}
+
+/**
+ * SQL for the most-recent-activity timestamp (MAX of createdAt) as an identical text format on both
+ * engines. SQLite's MAX over a `datetime` column returns the stored text; Postgres returns a timestamp
+ * the driver hydrates to a JS Date (serialized to a different ISO string). to_char/strftime pin both
+ * to `YYYY-MM-DD HH:MM:SS`, matching the format the time-series buckets already use, so the lastActive
+ * field is stable regardless of the backing database.
+ */
+export function maxCreatedAtSql(dbType: string): string {
+  return dbType === 'postgres'
+    ? `to_char(MAX(m."createdAt"), 'YYYY-MM-DD HH24:MI:SS')`
+    : `strftime('%Y-%m-%d %H:%M:%S', MAX(m.createdAt))`;
+}
 
 export interface OverviewStats {
   sessions: {
@@ -29,19 +66,29 @@ export interface MessageStats {
   timeSeries: TimeSeriesPoint[];
   byType: Record<string, number>;
   bySession: Array<{ sessionId: string; name: string; sent: number; received: number }>;
-  topChats: Array<{ chatId: string; messageCount: number }>;
+  topChats: Array<{ chatId: string; chatName: string | null; messageCount: number }>;
 }
 
 export interface SessionStats {
   session: { id: string; name: string; status: string };
   messages: { sent: number; received: number; today: number; failed: number };
-  topChats: Array<{ chatId: string; count: number; lastActive: string }>;
+  topChats: Array<{ chatId: string; chatName: string | null; count: number; lastActive: string }>;
   hourlyActivity: Array<{ hour: number; sent: number; received: number }>;
 }
 
 @Injectable()
 export class StatsService {
-  private readonly isMongo: boolean;
+  /**
+   * In-process TTL memo for the aggregate responses, keyed by query shape ('overview',
+   * 'messages:<period>', 'session:<id>'). The aggregates run GROUP BY scans over the whole
+   * messages table — on the default SQLite backend synchronously on the event loop — so
+   * dashboard polling would otherwise re-run them on every request. TTL-only invalidation:
+   * entries expire after stats.cacheTtlMs; there is no write-path hook. Session-scoped entries
+   * are additionally re-validated on serve (getSessionStats), so a deleted session is not
+   * resurrected from the memo. Key cardinality is
+   * bounded (4 global shapes + one per session), so no size eviction is needed.
+   */
+  private readonly memo = new Map<string, { expiresAt: number; value: unknown }>();
 
   constructor(
     @InjectRepository(Session, 'data')
@@ -49,12 +96,37 @@ export class StatsService {
     @InjectRepository(Message, 'data')
     private readonly messageRepo: Repository<Message>,
     private readonly cacheService: CacheService,
-  ) {
-    this.isMongo = (this.messageRepo.metadata?.connection?.options?.type as string) === 'mongodb';
+    private readonly configService: ConfigService,
+  ) {}
+
+  /** The data-connection dialect ('sqlite' | 'postgres'), used to pick portable date SQL. */
+  private get dataDbType(): string {
+    return this.messageRepo.manager.dataSource.options.type;
+  }
+
+  /** Memo TTL in ms; 0 disables memoization (every request hits the DB). Read per call. */
+  private get memoTtlMs(): number {
+    return this.configService.get<number>('stats.cacheTtlMs', 30000);
+  }
+
+  /** Returns the memoized value for `key` while fresh; otherwise computes, stores, returns it. */
+  private async memoized<T>(key: string, compute: () => Promise<T>): Promise<T> {
+    const ttl = this.memoTtlMs;
+    if (ttl <= 0) return compute();
+    const now = Date.now();
+    const hit = this.memo.get(key);
+    if (hit && hit.expiresAt > now) return hit.value as T;
+    const value = await compute();
+    this.memo.set(key, { expiresAt: now + ttl, value });
+    return value;
   }
 
   async getOverview(): Promise<OverviewStats> {
-    // Get session stats (compatible across all drivers)
+    return this.memoized('overview', () => this.loadOverview());
+  }
+
+  private async loadOverview(): Promise<OverviewStats> {
+    // Get session stats
     const sessions = await this.sessionRepo.find();
     const byStatus: Record<string, number> = {};
     let active = 0;
@@ -64,61 +136,36 @@ export class StatsService {
       if (session.status === SessionStatus.READY) active++;
     }
 
-    let sent = 0;
-    let received = 0;
-    let todaySent = 0;
-    let todayReceived = 0;
-
+    // Get message stats
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    if (this.isMongo) {
-      // MongoDB native aggregation
-      const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
+    const messageStats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.direction', 'direction')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('m.direction')
+      .getRawMany<{ direction: string; count: string }>();
 
-      const messageStats = await mongoRepo
-        .aggregate<{ _id: string; count: number }>([{ $group: { _id: '$direction', count: { $sum: 1 } } }])
-        .toArray();
+    const todayStats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.direction', 'direction')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.createdAt >= :todayStart', { todayStart })
+      .groupBy('m.direction')
+      .getRawMany<{ direction: string; count: string }>();
 
-      const todayStats = await mongoRepo
-        .aggregate<{ _id: string; count: number }>([
-          { $match: { createdAt: { $gte: todayStart } } },
-          { $group: { _id: '$direction', count: { $sum: 1 } } },
-        ])
-        .toArray();
-
-      sent = messageStats.find(m => m._id === 'outgoing')?.count || 0;
-      received = messageStats.find(m => m._id === 'incoming')?.count || 0;
-      todaySent = todayStats.find(m => m._id === 'outgoing')?.count || 0;
-      todayReceived = todayStats.find(m => m._id === 'incoming')?.count || 0;
-    } else {
-      // SQL (SQLite / Postgres)
-      const messageStats = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.direction', 'direction')
-        .addSelect('COUNT(*)', 'count')
-        .groupBy('m.direction')
-        .getRawMany<{ direction: string; count: string }>();
-
-      const todayStats = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.direction', 'direction')
-        .addSelect('COUNT(*)', 'count')
-        .where('m.createdAt >= :todayStart', { todayStart })
-        .groupBy('m.direction')
-        .getRawMany<{ direction: string; count: string }>();
-
-      sent = parseInt(messageStats.find(m => m.direction === 'outgoing')?.count || '0');
-      received = parseInt(messageStats.find(m => m.direction === 'incoming')?.count || '0');
-      todaySent = parseInt(todayStats.find(m => m.direction === 'outgoing')?.count || '0');
-      todayReceived = parseInt(todayStats.find(m => m.direction === 'incoming')?.count || '0');
-    }
+    const sent = parseInt(messageStats.find(m => m.direction === 'outgoing')?.count || '0');
+    const received = parseInt(messageStats.find(m => m.direction === 'incoming')?.count || '0');
+    const todaySent = parseInt(todayStats.find(m => m.direction === 'outgoing')?.count || '0');
+    const todayReceived = parseInt(todayStats.find(m => m.direction === 'incoming')?.count || '0');
 
     // Count failed messages
     const failed = await this.messageRepo.count({
       where: { status: MessageStatus.FAILED },
     });
 
+    // Cache session stats
     await this.cacheService.setSessionsStats({
       active,
       total: sessions.length,
@@ -126,212 +173,174 @@ export class StatsService {
     });
 
     return {
-      sessions: { active, total: sessions.length, byStatus },
-      messages: { sent, received, failed, today: { sent: todaySent, received: todayReceived } },
+      sessions: {
+        active,
+        total: sessions.length,
+        byStatus,
+      },
+      messages: {
+        sent,
+        received,
+        failed,
+        today: { sent: todaySent, received: todayReceived },
+      },
     };
   }
 
   async getMessageStats(period: '24h' | '7d' | '30d'): Promise<MessageStats> {
+    return this.memoized(`messages:${period}`, () => this.loadMessageStats(period));
+  }
+
+  private async loadMessageStats(period: '24h' | '7d' | '30d'): Promise<MessageStats> {
     const since = this.getPeriodStart(period);
     const interval = period === '24h' ? 'hour' : 'day';
 
+    // Time series - using raw query for SQLite compatibility
     const timeSeries = await this.getTimeSeries(since, interval);
 
+    // By type. Rows with no body AND no metadata are content-less system/event rows (e.g. @lid
+    // privacy-user events the engine maps to `unknown`) — counting them would put a misleading
+    // "unknown" slice in the by-type chart, so they're excluded from the aggregation.
+    const byTypeRaw = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.type', 'type')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.createdAt >= :since', { since })
+      .andWhere("(m.body IS NOT NULL AND m.body != '') OR m.metadata IS NOT NULL")
+      .groupBy('m.type')
+      .getRawMany<{ type: string; count: string }>();
+
     const byType: Record<string, number> = {};
-    let bySession: Array<{ sessionId: string; name: string; sent: number; received: number }> = [];
-    let topChatsRaw: Array<{ chatId: string; messageCount: number }> = [];
-
-    if (this.isMongo) {
-      const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
-
-      // By type
-      const byTypeRaw = await mongoRepo
-        .aggregate<{ _id: string; count: number }>([
-          { $match: { createdAt: { $gte: since } } },
-          { $group: { _id: '$type', count: { $sum: 1 } } },
-        ])
-        .toArray();
-      for (const row of byTypeRaw) {
-        byType[row._id || 'unknown'] = row.count;
-      }
-
-      // By session + direction
-      const bySessionRaw = await mongoRepo
-        .aggregate<{ _id: { sessionId: string; direction: string }; count: number }>([
-          { $match: { createdAt: { $gte: since } } },
-          { $group: { _id: { sessionId: '$sessionId', direction: '$direction' }, count: { $sum: 1 } } },
-        ])
-        .toArray();
-
-      const sessionMap = new Map<string, { sent: number; received: number }>();
-      for (const row of bySessionRaw) {
-        const sid = row._id.sessionId;
-        if (!sessionMap.has(sid)) sessionMap.set(sid, { sent: 0, received: 0 });
-        const entry = sessionMap.get(sid)!;
-        if (row._id.direction === 'outgoing') entry.sent = row.count;
-        else entry.received = row.count;
-      }
-
-      const sessions = await this.sessionRepo.find();
-      const sessionNames = new Map(sessions.map(s => [s.id, s.name]));
-      bySession = Array.from(sessionMap.entries()).map(([sessionId, stats]) => ({
-        sessionId,
-        name: sessionNames.get(sessionId) || 'Unknown',
-        ...stats,
-      }));
-
-      // Top chats
-      const topRaw = await mongoRepo
-        .aggregate<{ _id: string; messageCount: number }>([
-          { $match: { createdAt: { $gte: since } } },
-          { $group: { _id: '$chatId', messageCount: { $sum: 1 } } },
-          { $sort: { messageCount: -1 } },
-          { $limit: 10 },
-        ])
-        .toArray();
-      topChatsRaw = topRaw.map(r => ({ chatId: r._id, messageCount: r.messageCount }));
-    } else {
-      // SQL path
-      const byTypeRawSql = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.type', 'type')
-        .addSelect('COUNT(*)', 'count')
-        .where('m.createdAt >= :since', { since })
-        .groupBy('m.type')
-        .getRawMany<{ type: string; count: string }>();
-
-      for (const row of byTypeRawSql) {
-        byType[row.type || 'unknown'] = parseInt(row.count);
-      }
-
-      const bySessionRawSql = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.sessionId', 'sessionId')
-        .addSelect('m.direction', 'direction')
-        .addSelect('COUNT(*)', 'count')
-        .where('m.createdAt >= :since', { since })
-        .groupBy('m.sessionId')
-        .addGroupBy('m.direction')
-        .getRawMany<{ sessionId: string; direction: string; count: string }>();
-
-      const sessionMap = new Map<string, { sent: number; received: number }>();
-      for (const row of bySessionRawSql) {
-        if (!sessionMap.has(row.sessionId)) sessionMap.set(row.sessionId, { sent: 0, received: 0 });
-        const entry = sessionMap.get(row.sessionId)!;
-        if (row.direction === 'outgoing') entry.sent = parseInt(row.count);
-        else entry.received = parseInt(row.count);
-      }
-
-      const sessions = await this.sessionRepo.find();
-      const sessionNames = new Map(sessions.map(s => [s.id, s.name]));
-      bySession = Array.from(sessionMap.entries()).map(([sessionId, stats]) => ({
-        sessionId,
-        name: sessionNames.get(sessionId) || 'Unknown',
-        ...stats,
-      }));
-
-      const topSql = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.chatId', 'chatId')
-        .addSelect('COUNT(*)', 'messageCount')
-        .where('m.createdAt >= :since', { since })
-        .groupBy('m.chatId')
-        .orderBy('messageCount', 'DESC')
-        .limit(10)
-        .getRawMany<{ chatId: string; messageCount: string }>();
-
-      topChatsRaw = topSql.map(c => ({ chatId: c.chatId, messageCount: parseInt(c.messageCount) }));
+    for (const row of byTypeRaw) {
+      byType[row.type || 'unknown'] = parseInt(row.count);
     }
 
-    return { timeSeries, byType, bySession, topChats: topChatsRaw };
+    // By session
+    const bySessionRaw = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.sessionId', 'sessionId')
+      .addSelect('m.direction', 'direction')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.createdAt >= :since', { since })
+      .groupBy('m.sessionId')
+      .addGroupBy('m.direction')
+      .getRawMany<{ sessionId: string; direction: string; count: string }>();
+
+    const sessionMap = new Map<string, { sent: number; received: number }>();
+    for (const row of bySessionRaw) {
+      if (!sessionMap.has(row.sessionId)) {
+        sessionMap.set(row.sessionId, { sent: 0, received: 0 });
+      }
+      const entry = sessionMap.get(row.sessionId)!;
+      if (row.direction === 'outgoing') entry.sent = parseInt(row.count);
+      else entry.received = parseInt(row.count);
+    }
+
+    const sessions = await this.sessionRepo.find();
+    const sessionNames = new Map(sessions.map(s => [s.id, s.name]));
+
+    const bySession = Array.from(sessionMap.entries()).map(([sessionId, stats]) => ({
+      sessionId,
+      name: sessionNames.get(sessionId) || 'Unknown',
+      ...stats,
+    }));
+
+    // Top chats
+    const topChats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.chatId', 'chatId')
+      .addSelect('COUNT(*)', 'messageCount')
+      .addSelect('MAX(m.chatName)', 'chatName')
+      .where('m.createdAt >= :since', { since })
+      .groupBy('m.chatId')
+      // Order by the aggregate expression, not the "messageCount" alias: Postgres folds an unquoted
+      // ORDER BY messageCount to lowercase and 42703s against the quoted alias (SQLite tolerated it).
+      .orderBy('COUNT(*)', 'DESC')
+      .limit(10)
+      .getRawMany<{ chatId: string; messageCount: string; chatName: string | null }>();
+
+    return {
+      timeSeries,
+      byType,
+      bySession,
+      topChats: topChats.map(c => ({
+        chatId: c.chatId,
+        chatName: c.chatName ?? null,
+        messageCount: parseInt(c.messageCount),
+      })),
+    };
   }
 
   async getSessionStats(sessionId: string): Promise<SessionStats> {
+    // The memo has no write-path hook, so a `session:<id>` entry can outlive its session row and
+    // would keep serving a deleted session's stats until the TTL expires. Re-check existence on
+    // every call — a cheap primary-key lookup next to the aggregate scans the memo exists to
+    // avoid — and drop the stale entry instead of serving it.
+    const key = `session:${sessionId}`;
+    if ((await this.sessionRepo.count({ where: { id: sessionId } })) === 0) {
+      this.memo.delete(key);
+      throw new NotFoundException('Session not found');
+    }
+    return this.memoized(key, () => this.loadSessionStats(sessionId));
+  }
+
+  private async loadSessionStats(sessionId: string): Promise<SessionStats> {
     const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
-    if (!session) throw new NotFoundException('Session not found');
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    let sent = 0;
-    let received = 0;
-    let todayCount = 0;
-    let topChats: Array<{ chatId: string; count: number; lastActive: string }> = [];
-    let hourlyActivity: Array<{ hour: number; sent: number; received: number }> = [];
+    // Message counts
+    const stats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.direction', 'direction')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.sessionId = :sessionId', { sessionId })
+      .groupBy('m.direction')
+      .getRawMany<{ direction: string; count: string }>();
 
+    const todayCount = await this.messageRepo
+      .createQueryBuilder('m')
+      .where('m.sessionId = :sessionId', { sessionId })
+      .andWhere('m.createdAt >= :todayStart', { todayStart })
+      .getCount();
+
+    const sent = parseInt(stats.find(s => s.direction === 'outgoing')?.count || '0');
+    const received = parseInt(stats.find(s => s.direction === 'incoming')?.count || '0');
+
+    // Count failed messages for this session
     const failed = await this.messageRepo.count({
       where: { sessionId, status: MessageStatus.FAILED },
     });
 
-    if (this.isMongo) {
-      const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
+    // Top chats for this session
+    const topChats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.chatId', 'chatId')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect(maxCreatedAtSql(this.dataDbType), 'lastActive')
+      .addSelect('MAX(m.chatName)', 'chatName')
+      .where('m.sessionId = :sessionId', { sessionId })
+      .groupBy('m.chatId')
+      .orderBy('count', 'DESC')
+      .limit(10)
+      .getRawMany<{ chatId: string; count: string; lastActive: string; chatName: string | null }>();
 
-      const stats = await mongoRepo
-        .aggregate<{ _id: string; count: number }>([
-          { $match: { sessionId } },
-          { $group: { _id: '$direction', count: { $sum: 1 } } },
-        ])
-        .toArray();
-      sent = stats.find(s => s._id === 'outgoing')?.count || 0;
-      received = stats.find(s => s._id === 'incoming')?.count || 0;
-
-      const todayResult = await mongoRepo
-        .aggregate<{ count: number }>([{ $match: { sessionId, createdAt: { $gte: todayStart } } }, { $count: 'count' }])
-        .toArray();
-      todayCount = todayResult[0]?.count || 0;
-
-      const topRaw = await mongoRepo
-        .aggregate<{ _id: string; count: number; lastActive: Date }>([
-          { $match: { sessionId } },
-          { $group: { _id: '$chatId', count: { $sum: 1 }, lastActive: { $max: '$createdAt' } } },
-          { $sort: { count: -1 } },
-          { $limit: 10 },
-        ])
-        .toArray();
-      topChats = topRaw.map(c => ({
-        chatId: c._id,
-        count: c.count,
-        lastActive: c.lastActive ? new Date(c.lastActive).toISOString() : '',
-      }));
-
-      hourlyActivity = await this.getHourlyActivityMongo(sessionId);
-    } else {
-      const statsSql = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.direction', 'direction')
-        .addSelect('COUNT(*)', 'count')
-        .where('m.sessionId = :sessionId', { sessionId })
-        .groupBy('m.direction')
-        .getRawMany<{ direction: string; count: string }>();
-
-      todayCount = await this.messageRepo
-        .createQueryBuilder('m')
-        .where('m.sessionId = :sessionId', { sessionId })
-        .andWhere('m.createdAt >= :todayStart', { todayStart })
-        .getCount();
-
-      sent = parseInt(statsSql.find(s => s.direction === 'outgoing')?.count || '0');
-      received = parseInt(statsSql.find(s => s.direction === 'incoming')?.count || '0');
-
-      const topSql = await this.messageRepo
-        .createQueryBuilder('m')
-        .select('m.chatId', 'chatId')
-        .addSelect('COUNT(*)', 'count')
-        .addSelect('MAX(m.createdAt)', 'lastActive')
-        .where('m.sessionId = :sessionId', { sessionId })
-        .groupBy('m.chatId')
-        .orderBy('count', 'DESC')
-        .limit(10)
-        .getRawMany<{ chatId: string; count: string; lastActive: string }>();
-
-      topChats = topSql.map(c => ({ chatId: c.chatId, count: parseInt(c.count), lastActive: c.lastActive }));
-      hourlyActivity = await this.getHourlyActivitySql(sessionId);
-    }
+    // Hourly activity (last 24h)
+    const hourlyActivity = await this.getHourlyActivity(sessionId);
 
     return {
       session: { id: session.id, name: session.name, status: session.status },
       messages: { sent, received, today: todayCount, failed },
-      topChats,
+      topChats: topChats.map(c => ({
+        chatId: c.chatId,
+        chatName: c.chatName ?? null,
+        count: parseInt(c.count),
+        lastActive: c.lastActive,
+      })),
       hourlyActivity,
     };
   }
@@ -349,96 +358,33 @@ export class StatsService {
   }
 
   private async getTimeSeries(since: Date, interval: 'hour' | 'day'): Promise<TimeSeriesPoint[]> {
-    if (this.isMongo) {
-      const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
-      const dateFormat =
-        interval === 'hour'
-          ? { year: '$year', month: '$month', day: '$dayOfMonth', hour: '$hour' }
-          : { year: '$year', month: '$month', day: '$dayOfMonth' };
-
-      const raw = await mongoRepo
-        .aggregate<{
-          _id: Record<string, number>;
-          sent: number;
-          received: number;
-        }>([
-          { $match: { createdAt: { $gte: since } } },
-          {
-            $group: {
-              _id: Object.fromEntries(Object.entries(dateFormat).map(([k, v]) => [k, { [v]: '$createdAt' }])),
-              sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
-              received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
-            },
-          },
-          { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.hour': 1 } },
-        ])
-        .toArray();
-
-      return raw.map(r => {
-        const d = r._id;
-        const ts =
-          interval === 'hour'
-            ? `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hour || 0).padStart(2, '0')}:00:00`
-            : `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
-        return { timestamp: ts, sent: r.sent, received: r.received };
-      });
-    }
-
-    // SQLite path
-    const formatStr = interval === 'hour' ? '%Y-%m-%d %H:00:00' : '%Y-%m-%d';
+    // Alias the bucket as `bucket`, not `timestamp`: `timestamp` is a reserved type keyword in
+    // PostgreSQL, so `GROUP BY timestamp` is not read as the output alias and the query 500s
+    // ("column m.createdAt must appear in the GROUP BY"). SQLite tolerates it, hence the dialect-only
+    // bug. The API field stays `timestamp` (mapped below).
     const raw = await this.messageRepo
       .createQueryBuilder('m')
-      .select(`strftime('${formatStr}', m.createdAt)`, 'timestamp')
+      .select(timeSeriesTimestampSql(this.dataDbType, interval), 'bucket')
       .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
       .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
       .where('m.createdAt >= :since', { since })
-      .groupBy('timestamp')
-      .orderBy('timestamp', 'ASC')
-      .getRawMany<{ timestamp: string; sent: string; received: string }>();
+      .groupBy('bucket')
+      .orderBy('bucket', 'ASC')
+      .getRawMany<{ bucket: string; sent: string; received: string }>();
 
     return raw.map(r => ({
-      timestamp: r.timestamp,
+      timestamp: r.bucket,
       sent: parseInt(r.sent || '0'),
       received: parseInt(r.received || '0'),
     }));
   }
 
-  private async getHourlyActivityMongo(
-    sessionId: string,
-  ): Promise<Array<{ hour: number; sent: number; received: number }>> {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const mongoRepo = this.messageRepo as unknown as MongoRepository<Message>;
-
-    const raw = await mongoRepo
-      .aggregate<{ _id: number; sent: number; received: number }>([
-        { $match: { sessionId, createdAt: { $gte: since } } },
-        {
-          $group: {
-            _id: { $hour: '$createdAt' },
-            sent: { $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] } },
-            received: { $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] } },
-          },
-        },
-      ])
-      .toArray();
-
-    const hourMap = new Map(raw.map(r => [r._id, r]));
-    const result: Array<{ hour: number; sent: number; received: number }> = [];
-    for (let h = 0; h < 24; h++) {
-      const data = hourMap.get(h);
-      result.push({ hour: h, sent: data?.sent || 0, received: data?.received || 0 });
-    }
-    return result;
-  }
-
-  private async getHourlyActivitySql(
-    sessionId: string,
-  ): Promise<Array<{ hour: number; sent: number; received: number }>> {
+  private async getHourlyActivity(sessionId: string): Promise<Array<{ hour: number; sent: number; received: number }>> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const raw = await this.messageRepo
       .createQueryBuilder('m')
-      .select(`CAST(strftime('%H', m.createdAt) AS INTEGER)`, 'hour')
+      .select(hourBucketSql(this.dataDbType), 'hour')
       .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
       .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
       .where('m.sessionId = :sessionId', { sessionId })
@@ -447,8 +393,10 @@ export class StatsService {
       .orderBy('hour', 'ASC')
       .getRawMany<{ hour: string; sent: string; received: string }>();
 
+    // Fill in missing hours
     const result: Array<{ hour: number; sent: number; received: number }> = [];
     const hourMap = new Map(raw.map(r => [parseInt(r.hour), r]));
+
     for (let h = 0; h < 24; h++) {
       const data = hourMap.get(h);
       result.push({
@@ -457,6 +405,7 @@ export class StatsService {
         received: data ? parseInt(data.received || '0') : 0,
       });
     }
+
     return result;
   }
 }

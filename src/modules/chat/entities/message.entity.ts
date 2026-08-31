@@ -23,7 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
 @Index(['chatId'])
 export class Message {
   @PrimaryColumn('uuid')
-  id: string;
+  id!: string;
 
   @BeforeInsert()
   generateId() {
@@ -33,50 +33,50 @@ export class Message {
   }
 
   @Column({ type: 'varchar', length: 100 })
-  sessionId: string;
+  sessionId!: string;
 
   @Column({ type: 'varchar', length: 100 })
-  chatId: string;
+  chatId!: string;
 
   @Column({ type: 'varchar', length: 100 })
-  messageId: string;
+  messageId!: string;
 
   @Column({ type: 'text', nullable: true })
-  body: string | null;
+  body!: string | null;
 
   @Column({ type: 'varchar', length: 50 })
-  type: string;
+  type!: string;
 
   @Column({ type: 'bigint', nullable: true })
-  timestamp: number | null;
+  timestamp!: number | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  from: string | null;
+  from!: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  to: string | null;
+  to!: string | null;
 
   @Column({ type: 'boolean', default: false })
-  fromMe: boolean;
+  fromMe!: boolean;
 
   @Column({ type: 'boolean', default: false })
-  hasMedia: boolean;
+  hasMedia!: boolean;
 
   @Column({ type: 'simple-json', nullable: true })
-  mediaData: Record<string, unknown> | null;
+  mediaData!: Record<string, unknown> | null;
 
   @Column({ type: 'int', nullable: true })
-  ack: number | null;
+  ack!: number | null;
 
   @Column({ type: 'simple-json', nullable: true })
-  quotedMessage: Record<string, unknown> | null;
+  quotedMessage!: Record<string, unknown> | null;
 
   @Column({ type: 'simple-json', nullable: true })
-  metadata: Record<string, unknown> | null;
+  metadata!: Record<string, unknown> | null;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
