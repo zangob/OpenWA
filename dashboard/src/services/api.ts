@@ -1252,7 +1252,7 @@ export const infraApi = {
 // Contact & Chat Types
 // =============================================================================
 
-export interface Contact {
+export interface LiveContact {
   id: string;
   name?: string;
   pushName?: string;
@@ -1299,7 +1299,7 @@ export interface ContactStats {
   lastSynced: string | null;
 }
 
-export interface ChatMessage {
+export interface LiveChatMessage {
   id: string;
   body: string;
   type: string;
@@ -1316,7 +1316,7 @@ export interface ChatMessage {
   };
 }
 
-export interface Chat {
+export interface LiveChat {
   id: string;
   name: string;
   isGroup: boolean;
@@ -1419,11 +1419,11 @@ export const contactsApi = {
   // ========== LIVE WHATSAPP CONTACTS (DIRECT FETCH) ==========
 
   // Get contacts directly from WhatsApp (real-time, not stored)
-  listLive: (sessionId: string) => request<Contact[]>(`/sessions/${sessionId}/contacts/live`),
+  listLive: (sessionId: string) => request<LiveContact[]>(`/sessions/${sessionId}/contacts/live`),
 
   // Get single contact directly from WhatsApp
   getLive: (sessionId: string, contactId: string) =>
-    request<Contact>(`/sessions/${sessionId}/contacts/live/${contactId}`),
+    request<LiveContact>(`/sessions/${sessionId}/contacts/live/${contactId}`),
 
   // Sync single contact to database
   syncSingle: (sessionId: string, contactId: string) =>
@@ -1504,14 +1504,14 @@ export const chatsApi = {
   // ========== LIVE WHATSAPP CHATS (DIRECT FETCH) ==========
 
   // Get chats directly from WhatsApp (real-time, not stored)
-  listLive: (sessionId: string) => request<Chat[]>(`/sessions/${sessionId}/chats/live`),
+  listLive: (sessionId: string) => request<LiveChat[]>(`/sessions/${sessionId}/chats/live`),
 
   // Get single chat directly from WhatsApp
-  getLive: (sessionId: string, chatId: string) => request<Chat>(`/sessions/${sessionId}/chats/${chatId}`),
+  getLive: (sessionId: string, chatId: string) => request<LiveChat>(`/sessions/${sessionId}/chats/${chatId}`),
 
   // Get chat history
   getHistory: (sessionId: string, chatId: string, limit?: number) =>
-    request<ChatMessage[]>(`/sessions/${sessionId}/chats/${chatId}/history${limit ? `?limit=${limit}` : ''}`),
+    request<LiveChatMessage[]>(`/sessions/${sessionId}/chats/${chatId}/history${limit ? `?limit=${limit}` : ''}`),
 };
 
 // =============================================================================

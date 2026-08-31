@@ -20,7 +20,7 @@ import {
 import { useSessionsQuery, useSessionGroupsQuery } from '../hooks/queries';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useRole } from '../hooks/useRole';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { PageHeader } from '../components/PageHeader';
 import './Campaigns.css';
 

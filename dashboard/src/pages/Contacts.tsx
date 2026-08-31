@@ -10,7 +10,6 @@ import {
   MessageCircle,
   MoreVertical,
   ArrowLeft,
-  Phone,
   Check,
   CheckCheck,
   Clock,
@@ -25,19 +24,17 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import {
   contactsApi,
   chatsApi,
   sessionApi,
   messageApi,
   type ContactDb,
-  type Chat,
-  type ChatMessage,
+  type LiveChatMessage,
   type ContactStats,
   type ChatDb,
   type ChatStats,
-  type ChatSyncResult,
 } from '../services/api';
 import './Contacts.css';
 
@@ -65,17 +62,17 @@ export function Contacts() {
   const [chatStats, setChatStats] = useState<ChatStats | null>(null);
   const [chatsLastSynced, setChatsLastSynced] = useState<string | null>(null);
   const [syncingChats, setSyncingChats] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<{ synced: number; total: number; messages: number } | null>(null);
+  const [, setSyncProgress] = useState<{ synced: number; total: number; messages: number } | null>(null);
   const [useDatabaseChats, setUseDatabaseChats] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'number' | 'recent' | 'lastSeen'>('name');
-  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
+  const [sortOrder] = useState<'ASC' | 'DESC'>('ASC');
   const [showOnlyMyContacts, setShowOnlyMyContacts] = useState(false);
   const [showOnlyGroups, setShowOnlyGroups] = useState(false);
 
@@ -85,7 +82,7 @@ export function Contacts() {
   // Chat view states
   const [selectedChat, setSelectedChat] = useState<ChatDb | null>(null);
   const [selectedContact, setSelectedContact] = useState<ContactDb | null>(null);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatHistory, setChatHistory] = useState<LiveChatMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
