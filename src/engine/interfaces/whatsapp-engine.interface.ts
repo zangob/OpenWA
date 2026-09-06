@@ -491,6 +491,25 @@ export interface ChatSummary {
   unreadCount: number;
   timestamp: number;
   lastMessage?: string;
+  /** Archived state, as set via `POST /sessions/{sessionId}/chats/archive`. */
+  archived: boolean;
+  /** Pinned state, as set via `POST /sessions/{sessionId}/chats/pin`. */
+  pinned: boolean;
+  /**
+   * Muted state, as set via `POST /sessions/{sessionId}/chats/mute`. The verdict a caller needs to
+   * label a mute/unmute control: whatsapp-web.js derives `Chat.isMuted` itself, and Baileys compares
+   * a persisted `muteEndTime` (epoch milliseconds) against now. `muteExpiration` carries the instant.
+   */
+  muted: boolean;
+  /**
+   * Epoch MILLISECONDS at which the mute ends, present only when `muted` is true; `0` means muted
+   * indefinitely. Milliseconds is the same unit as `POST /sessions/{sessionId}/chats/mute`
+   * `muteUntil`, so a FINITE value can be written straight back (`mute-chat.dto.ts` documents that
+   * unit and why a seconds value is a trap). The `0` an indefinite mute reports is the exception:
+   * `muteUntil` requires a real future instant, so re-apply an indefinite mute with a far-future
+   * timestamp rather than `0`.
+   */
+  muteExpiration?: number;
 }
 
 // Phase 3: Chat History (dashboard "Chat History" sync — see modules/chat).
@@ -780,6 +799,23 @@ export interface EngineEventCallbacks {
    */
   onHistoryMessages?: (messages: IncomingMessage[]) => void;
   onDisconnected?: (reason: string) => void;
+  /**
+   * Fired each time the engine schedules an INTERNAL reconnect attempt: a drop it retries on its own
+   * and deliberately does NOT report through `onDisconnected`, because the session is still linked and
+   * the credentials are still good. Purely informational, so a consumer must not tear anything down on
+   * it; the engine keeps owning the retry.
+   *
+   * `attempt` is the 1-based number of the attempt being scheduled, and it resets once the connection
+   * is back (or after a long enough healthy stretch), so attempt 1 always opens a fresh episode.
+   * `nextDelayMs` is how long the engine waits before making it. Together they are what a consumer
+   * needs to tell a one-second blip from a session that has been down for an hour, which the status
+   * alone cannot: the engine reports INITIALIZING for the whole episode, exactly as it does for a
+   * session that has never been paired.
+   *
+   * Optional: an engine that hands every drop to its consumer instead of retrying internally
+   * (whatsapp-web.js does) simply never invokes this, because that consumer already has the drop.
+   */
+  onReconnecting?: (attempt: number, nextDelayMs: number) => void;
   onStateChanged?: (state: EngineStatus) => void;
   /**
    * Fired when the engine needs an operator action to keep the session healthy — currently only the
